@@ -1,0 +1,13 @@
+#mygitignore
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+
+.vscode/
+.idea/
+
+*.log
+.DS_Store
