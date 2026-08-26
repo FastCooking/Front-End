@@ -1,16 +1,31 @@
-# React + Vite
+## Estratégia de Branches
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+O projeto utiliza uma estratégia de branches para organizar o
+desenvolvimento e evitar alterações diretas na branch principal.
 
-Currently, two official plugins are available:
+### Branches principais
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `main` → versão estável do projeto
+- `develop` → integração das funcionalidades em desenvolvimento
 
-## React Compiler
+### Branches de trabalho
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+As branches de trabalho devem seguir os seguintes padrões:
 
-## Expanding the ESLint configuration
+- `feature/*` → novas funcionalidades
+- `fix/*` → correções de bugs
+- `refactor/*` → refatorações
+- `test/*` → criação ou alteração de testes
+- `devops/*` → infraestrutura e automações
+- `docs/*` → documentação
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Exemplos
+
+```text
+feature/FE01-cardapio
+feature/FE02-carrinho
+fix/FE03-calculo-total
+refactor/FE04-componente-cardapio
+test/FE05-testes-carrinho
+devops/DO01-git
+docs/README
