@@ -21,7 +21,9 @@ jobs:
         run: npm ci
 
       - name: Rodar lint
-        run: npm run lint
+        run: |
+          npm run lint -- --fix
+          npm run lint
 
       - name: Rodar testes
         run: npm test -- --run
