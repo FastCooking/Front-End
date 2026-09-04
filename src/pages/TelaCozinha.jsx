@@ -1,8 +1,7 @@
 function TelaCozinha() {
     return (
-        <div>
+        <div className="min-h-screen bg-linear-to-r from-[#F9ECE5] to-[#D4C8C0] flex items-center justify-center">
             <h1>Tela da Cozinha</h1>
-            {<h1>Em construção</h1>}
         </div>
     );
 }
