@@ -6,15 +6,36 @@
   :root {
     --font-sans: 'Poppins', sans-serif;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  section[id] {
+    scroll-margin-top: 5rem;
+  }
 }
 
 @keyframes slide-in {
-
   from {
     transform: translateX(100%);
-    opacity: 0;}
-    
+    opacity: 0;
+  }
   to {
     transform: translateX(0);
-    opacity: 1;}
+    opacity: 1;
+  }
+}
+
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
 }
