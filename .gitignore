@@ -22,16 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-#mygitignore
-node_modules/
-dist/
-build/
+
+#Variáveis de ambiente
 .env
-.env.*
-!.env.example
-
-.vscode/
-.idea/
-
-*.log
-.DS_Store
