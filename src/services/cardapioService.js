@@ -1,4 +1,10 @@
-const API_URL = "/api/cardapio";
+const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const API_URL = `${BASE_URL}/cardapio`;
+
+function getAuthHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export async function listarItensCardapio() {
   const resposta = await fetch(API_URL);
@@ -9,7 +15,7 @@ export async function listarItensCardapio() {
 export async function criarItemCardapio(item) {
   const resposta = await fetch(API_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(item),
   });
   if (!resposta.ok) throw new Error("Erro ao criar item do cardápio");
@@ -19,7 +25,7 @@ export async function criarItemCardapio(item) {
 export async function atualizarItemCardapio(id, item) {
   const resposta = await fetch(`${API_URL}/${id}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify(item),
   });
   if (!resposta.ok) throw new Error("Erro ao atualizar item do cardápio");
@@ -29,7 +35,7 @@ export async function atualizarItemCardapio(id, item) {
 export async function alternarDisponibilidade(id, disponivel) {
   const resposta = await fetch(`${API_URL}/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ disponivel }),
   });
   if (!resposta.ok) throw new Error("Erro ao atualizar disponibilidade");
@@ -37,6 +43,9 @@ export async function alternarDisponibilidade(id, disponivel) {
 }
 
 export async function excluirItemCardapio(id) {
-  const resposta = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+  const resposta = await fetch(`${API_URL}/${id}`, {
+    method: "DELETE",
+    headers: { ...getAuthHeaders() },
+  });
   if (!resposta.ok) throw new Error("Erro ao excluir item do cardápio");
 }

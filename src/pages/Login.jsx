@@ -1,6 +1,6 @@
 import  {useState, useEffect} from 'react';
 
-import {mockLogin} from '../services/AuthMock';
+import { login } from '../services/authService';
 
 import {useNavigate} from 'react-router-dom';
 
@@ -8,12 +8,12 @@ import {RotaPerfil} from '../constants/RotasPerfil';
 
 import logo from '../assets/fast cooking logo.png';
 
-import { MdEmail } from 'react-icons/md';
-import { MdLock } from 'react-icons/md';
+import { MdEmail, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 
 function TelaLogin(){
     const [email, setEmail] = useState('');
     const [senha, setSenha] = useState('');
+    const [mostrarSenha, setMostrarSenha] = useState(false);
 
     const[erro, setErro] = useState('');
     const[tentativas, setTentativas] = useState(0);
@@ -30,7 +30,6 @@ function TelaLogin(){
     
     function handleEnter(event){
         event.preventDefault();
-        console.log('Tentando Logar com:', email, senha);
 
         async function performLogin(event){
             event.preventDefault();
@@ -38,13 +37,16 @@ function TelaLogin(){
             if(bloqueado) return;
 
             try{
-                const dados =  await mockLogin(email, senha);
+                const dados = await login(email, senha);
                 console.log('Login bem-sucedido:', dados);
+
+                localStorage.setItem('token', dados.access_token);
+                localStorage.setItem('funcao', dados.funcao);
 
                 setErro('');
                 setTentativas(0);
 
-                navigate(RotaPerfil[dados.perfil]);
+                navigate(RotaPerfil[dados.funcao]);
 
             } catch (error) {
                 console.error('Erro ao fazer login:', error.message);
@@ -82,7 +84,7 @@ function TelaLogin(){
                             type="email" 
                             placeholder="E-mail" 
                             value={email} onChange={(e)=> setEmail(e.target.value)} 
-                            className="border solid border-slate-300 rounded-md p-2 pl-5" required
+                            className="border solid border-slate-300 rounded-md p-2 pl-5 w-64" required
                         />
                     </div><br /> 
                     
@@ -95,11 +97,19 @@ function TelaLogin(){
                         />
                         <input 
                             id="senha" 
-                            type="password" 
+                            type={mostrarSenha ? "text" : "password"} 
                             placeholder="Senha" 
                             value={senha} onChange={(e)=> setSenha(e.target.value)} 
-                            className="border solid border-slate-300 rounded-md p-2 pl-5" required
+                            className="border solid border-slate-300 rounded-md p-2 pl-5 pr-8 w-64" required
                         />
+                        <button
+                            type="button"
+                            onClick={() => setMostrarSenha(!mostrarSenha)}
+                            className="absolute top-1/2 -translate-y-1/2 right-2 text-gray-500 hover:text-gray-700 cursor-pointer focus:outline-none"
+                            title={mostrarSenha ? "Ocultar senha" : "Ver senha"}
+                        >
+                            {mostrarSenha ? <MdVisibilityOff size={18} /> : <MdVisibility size={18} />}
+                        </button>
                     </div><br />    
 
                     <button type="submit" className="bg-[#9C1C0E] text-white py-2 px-4 rounded-md hover:bg-[#7a160b] focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
