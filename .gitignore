@@ -1,3 +1,5 @@
+.env
+
 # Logs
 logs
 *.log
@@ -24,4 +26,4 @@ dist-ssr
 *.sw?
 
 #Variáveis de ambiente
-.env
+
