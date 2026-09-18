@@ -213,10 +213,10 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Upload de Imagem com compressão de 60% */}
+          {/* Upload de Imagem */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Foto do Prato / Item (Compressão automática a 60% de resolução no servidor)
+              Foto do Prato / Item
             </label>
             <div className="flex items-center gap-4 border border-dashed border-gray-300 p-3 rounded-xl bg-gray-50">
               {previewImagem ? (
