@@ -3,13 +3,22 @@ import { MdPerson, MdVisibility, MdVisibilityOff } from "react-icons/md";
 import { criarUsuario } from "../../services/usuarioService";
 import { formatarCPF } from "../../utils/formatters";
 
-function ModalNovoUsuario({ restaurantes, restaurantePreSelecionado, onClose, onSuccess }) {
-  const [idRestaurante, setIdRestaurante] = useState("");
+function ModalNovoUsuario({
+  restaurantes,
+  restaurantePreSelecionado,
+  cargosPermitidos = ["Gerente", "Adm", "Garcom", "Cozinheiro"],
+  travarRestaurante = false,
+  onClose,
+  onSuccess,
+}) {
+  const [idRestaurante, setIdRestaurante] = useState(
+    restaurantePreSelecionado ? String(restaurantePreSelecionado) : ""
+  );
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [funcao, setFuncao] = useState("Gerente");
+  const [funcao, setFuncao] = useState(cargosPermitidos[0] || "Garcom");
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   const [carregando, setCarregando] = useState(false);
@@ -23,16 +32,13 @@ function ModalNovoUsuario({ restaurantes, restaurantePreSelecionado, onClose, on
   });
 
   // Atualiza a seleção inicial caso não esteja setada ou seja um restaurante removido
-  useState(() => {
-    const selecionado = restaurantesDisponiveis.find(
-      (r) => String(r.idRestaurante) === String(restaurantePreSelecionado)
-    );
-    if (selecionado) {
-      setIdRestaurante(String(selecionado.idRestaurante));
-    } else if (restaurantesDisponiveis.length > 0) {
+  useEffect(() => {
+    if (restaurantePreSelecionado) {
+      setIdRestaurante(String(restaurantePreSelecionado));
+    } else if (!idRestaurante && restaurantesDisponiveis.length > 0) {
       setIdRestaurante(String(restaurantesDisponiveis[0].idRestaurante));
     }
-  });
+  }, [restaurantePreSelecionado, restaurantesDisponiveis]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -101,22 +107,29 @@ function ModalNovoUsuario({ restaurantes, restaurantePreSelecionado, onClose, on
             <label className="block text-xs font-semibold text-gray-700 mb-1">
               Restaurante Vinculado <span className="text-[#9C1C0E]">*</span>
             </label>
-            {restaurantesDisponiveis.length === 0 ? (
+            {restaurantesDisponiveis.length === 0 && !idRestaurante ? (
               <div className="text-xs text-red-600 p-2 border border-red-200 rounded-lg bg-red-50">
                 Nenhum restaurante ativo disponível. Cadastre ou ative um restaurante primeiro.
               </div>
             ) : (
               <select
                 required
+                disabled={travarRestaurante}
                 value={idRestaurante}
                 onChange={(e) => setIdRestaurante(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none"
+                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none disabled:bg-gray-100 disabled:text-gray-600 cursor-pointer disabled:cursor-not-allowed"
               >
                 {restaurantesDisponiveis.map((r) => (
                   <option key={r.idRestaurante} value={r.idRestaurante}>
                     {r.nome} (ID: {r.idRestaurante})
                   </option>
                 ))}
+                {/* Fallback caso restaurantePreSelecionado não esteja na lista carregada ainda */}
+                {!restaurantesDisponiveis.some((r) => String(r.idRestaurante) === String(idRestaurante)) && idRestaurante && (
+                  <option value={idRestaurante}>
+                    Restaurante ID #{idRestaurante}
+                  </option>
+                )}
               </select>
             )}
           </div>
@@ -175,10 +188,10 @@ function ModalNovoUsuario({ restaurantes, restaurantePreSelecionado, onClose, on
               onChange={(e) => setFuncao(e.target.value)}
               className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none"
             >
-              <option value="Gerente">Gerente</option>
-              <option value="Adm">Adm</option>
-              <option value="Garcom">Garçom</option>
-              <option value="Cozinheiro">Cozinheiro</option>
+              {cargosPermitidos.includes("Garcom") && <option value="Garcom">Garçom</option>}
+              {cargosPermitidos.includes("Cozinheiro") && <option value="Cozinheiro">Cozinheiro</option>}
+              {cargosPermitidos.includes("Gerente") && <option value="Gerente">Gerente</option>}
+              {cargosPermitidos.includes("Adm") && <option value="Adm">Adm</option>}
             </select>
           </div>
 

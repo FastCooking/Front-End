@@ -7,6 +7,7 @@ import {BrowserRouter, Routes, Route} from 'react-router-dom';
 import TelaGarcom from './pages/TelaGarcom';
 import TelaCozinha from './pages/TelaCozinha';
 import TelaAdministrador from './pages/TelaAdministrador';
+import TelaGerente from './pages/TelaGerente';
 import LandingPage from './pages/LandingPage';
 
 
@@ -20,6 +21,7 @@ function App(){
         <Route path="/garcom" element={<TelaGarcom />} />
         <Route path="/cozinha" element={<TelaCozinha />} />
         <Route path="/administrativo" element={<TelaAdministrador />} />
+        <Route path="/gerente" element={<TelaGerente />} />
       </Routes>
     </BrowserRouter>
   );
