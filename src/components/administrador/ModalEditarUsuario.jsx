@@ -3,11 +3,18 @@ import { MdPerson } from "react-icons/md";
 import { atualizarUsuario } from "../../services/usuarioService";
 import { formatarCPF } from "../../utils/formatters";
 
-function ModalEditarUsuario({ usuario, onClose, onSuccess }) {
+function ModalEditarUsuario({
+  usuario,
+  cargosPermitidos = ["Gerente", "Adm", "Garcom", "Cozinheiro"],
+  onClose,
+  onSuccess,
+}) {
   const [nome, setNome] = useState(usuario.nome || "");
   const [cpf, setCpf] = useState(formatarCPF(usuario.cpf || ""));
   const [email, setEmail] = useState(usuario.email || "");
-  const [funcao, setFuncao] = useState(usuario.funcao || "Gerente");
+  const [funcao, setFuncao] = useState(
+    cargosPermitidos.includes(usuario.funcao) ? usuario.funcao : cargosPermitidos[0] || "Garcom"
+  );
 
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -119,10 +126,10 @@ function ModalEditarUsuario({ usuario, onClose, onSuccess }) {
               onChange={(e) => setFuncao(e.target.value)}
               className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none"
             >
-              <option value="Gerente">Gerente</option>
-              <option value="Adm">Adm</option>
-              <option value="Garcom">Garçom</option>
-              <option value="Cozinheiro">Cozinheiro</option>
+              {cargosPermitidos.includes("Garcom") && <option value="Garcom">Garçom</option>}
+              {cargosPermitidos.includes("Cozinheiro") && <option value="Cozinheiro">Cozinheiro</option>}
+              {cargosPermitidos.includes("Gerente") && <option value="Gerente">Gerente</option>}
+              {cargosPermitidos.includes("Adm") && <option value="Adm">Adm</option>}
             </select>
           </div>
 
