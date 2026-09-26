@@ -1,10 +1,10 @@
 const RotaPerfil = {
   garcom: '/garcom',
-  gerente: '/administrativo',
+  gerente: '/gerente',
   cozinha: '/cozinha',
   adm: '/administrativo',
   Garcom: '/garcom',
-  Gerente: '/administrativo',
+  Gerente: '/gerente',
   Cozinheiro: '/cozinha',
   Cozinha: '/cozinha',
   Adm: '/administrativo',

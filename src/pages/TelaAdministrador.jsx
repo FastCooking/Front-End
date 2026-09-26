@@ -227,9 +227,6 @@ function TelaAdministrador() {
         </div>
 
         <div className="flex items-center gap-4 mt-2 sm:mt-0">
-          <span className="text-xs bg-[#9C1C0E]/10 text-[#9C1C0E] px-3 py-1 rounded-full font-semibold">
-            Role: ADM
-          </span>
           <button
             onClick={handleLogout}
             className="flex items-center gap-1 text-sm text-gray-600 hover:text-[#9C1C0E] transition-colors cursor-pointer"
@@ -271,7 +268,7 @@ function TelaAdministrador() {
             }`}
           >
             <MdStore size={18} />
-            Restaurantes ({restaurantes.length})
+            Restaurantes
           </button>
 
           <button
@@ -283,7 +280,7 @@ function TelaAdministrador() {
             }`}
           >
             <MdPeople size={18} />
-            Usuários ({usuarios.length})
+            Usuários
           </button>
         </div>
 
