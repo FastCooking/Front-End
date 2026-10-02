@@ -510,18 +510,6 @@ function TelaGerente() {
           </button>
 
           <button
-            onClick={() => setAbaAtiva("pedidos")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
-              abaAtiva === "pedidos"
-                ? "bg-[#9C1C0E] text-white shadow-md"
-                : "bg-white/60 text-gray-700 hover:bg-white"
-            }`}
-          >
-            <MdShoppingBag size={18} />
-            Pedidos
-          </button>
-
-          <button
             onClick={() => setAbaAtiva("historico")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
               abaAtiva === "historico"
@@ -1108,8 +1096,8 @@ function TelaGerente() {
           </div>
         )}
 
-        {/* ================= ABAS MOCK (COZINHA, PEDIDOS, HISTÓRICO) ================= */}
-        {(abaAtiva === "cozinha" || abaAtiva === "pedidos" || abaAtiva === "historico") && (
+        {/* ================= ABAS MOCK (COZINHA, HISTÓRICO) ================= */}
+        {(abaAtiva === "cozinha" || abaAtiva === "historico") && (
           <div className="bg-white/80 backdrop-blur-xs p-12 rounded-2xl shadow-md border border-gray-200 text-center">
             <h2 className="text-xl font-bold text-[#9C1C0E] mb-2 capitalize">
               Módulo de {abaAtiva}
