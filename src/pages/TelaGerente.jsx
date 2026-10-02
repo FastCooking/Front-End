@@ -52,7 +52,7 @@ function getUserIdFromToken() {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
     return payload.sub ? Number(payload.sub) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -182,9 +182,15 @@ function TelaGerente() {
   }, [idRestauranteGerente, filtroFuncaoUsuario, buscaUsuario]);
 
   useEffect(() => {
+    let ativo = true;
     if (abaAtiva === "usuarios") {
-      carregarUsuarios();
+      Promise.resolve().then(() => {
+        if (ativo) carregarUsuarios();
+      });
     }
+    return () => {
+      ativo = false;
+    };
   }, [abaAtiva, carregarUsuarios]);
 
   // 3. Carregar Cardápio
@@ -201,9 +207,15 @@ function TelaGerente() {
   }, [idRestauranteGerente]);
 
   useEffect(() => {
+    let ativo = true;
     if (abaAtiva === "cardapio") {
-      carregarCardapio();
+      Promise.resolve().then(() => {
+        if (ativo) carregarCardapio();
+      });
     }
+    return () => {
+      ativo = false;
+    };
   }, [abaAtiva, carregarCardapio]);
 
   // 4. Carregar Estoque
@@ -220,9 +232,15 @@ function TelaGerente() {
   }, []);
 
   useEffect(() => {
+    let ativo = true;
     if (abaAtiva === "estoque") {
-      carregarEstoque();
+      Promise.resolve().then(() => {
+        if (ativo) carregarEstoque();
+      });
     }
+    return () => {
+      ativo = false;
+    };
   }, [abaAtiva, carregarEstoque]);
 
   function dispararSucesso(msg) {

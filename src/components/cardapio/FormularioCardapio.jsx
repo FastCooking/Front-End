@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   atualizarItemCardapio,
   criarItemCardapio,
@@ -12,16 +12,21 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
+  const [prevItemEmEdicao, setPrevItemEmEdicao] = useState(itemEmEdicao);
+  if (itemEmEdicao !== prevItemEmEdicao) {
+    setPrevItemEmEdicao(itemEmEdicao);
     if (itemEmEdicao) {
       setNome(itemEmEdicao.nome ?? "");
       setPreco(itemEmEdicao.preco ?? "");
       setCategoria(itemEmEdicao.categoria ?? "");
       setDisponivel(itemEmEdicao.disponivel ?? true);
     } else {
-      limparCampos();
+      setNome("");
+      setPreco("");
+      setCategoria("");
+      setDisponivel(true);
     }
-  }, [itemEmEdicao]);
+  }
 
   function limparCampos() {
     setNome("");
