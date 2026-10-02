@@ -15,10 +15,6 @@ function FormularioFichaTec() {
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    carregarDados();
-  }, []);
-
   async function carregarDados() {
     try {
       const [cardapioData, insumosData] = await Promise.all([
@@ -31,6 +27,16 @@ function FormularioFichaTec() {
       console.error("Erro ao carregar cardápio/insumos para ficha técnica:", e);
     }
   }
+
+  useEffect(() => {
+    let ativo = true;
+    Promise.resolve().then(() => {
+      if (ativo) carregarDados();
+    });
+    return () => {
+      ativo = false;
+    };
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();

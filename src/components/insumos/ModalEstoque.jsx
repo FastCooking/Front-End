@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { MdInventory } from "react-icons/md";
 import { criarInsumos, atualizarInsumo } from "../../services/insumosService";
 
@@ -21,14 +21,21 @@ function ModalEstoque({ item, onClose, onSuccess }) {
     { label: "Caixa (cx)", value: "cx" },
   ];
 
-  useEffect(() => {
+  const [prevItem, setPrevItem] = useState(item);
+  if (item !== prevItem) {
+    setPrevItem(item);
     if (item) {
       setNome(item.nome || "");
       setQuantidadeEmEstoque(item.quantidadeEmEstoque ? String(item.quantidadeEmEstoque) : "");
       setQuantidadeMinima(item.quantidadeMinima ? String(item.quantidadeMinima) : "");
       setUnidadeMedida(item.unidadeMedida || "kg");
+    } else {
+      setNome("");
+      setQuantidadeEmEstoque("");
+      setQuantidadeMinima("");
+      setUnidadeMedida("kg");
     }
-  }, [item]);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();

@@ -71,8 +71,10 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     carregarInsumosE_Ficha();
   }, [item]);
 
-  // 2. Preencher formulário ao editar item
-  useEffect(() => {
+  // 2. Preencher formulário ao editar item (Ajuste de estado na renderização)
+  const [prevItem, setPrevItem] = useState(item);
+  if (item !== prevItem) {
+    setPrevItem(item);
     if (item) {
       setNome(item.nome || "");
       setPreco(item.preco ? String(item.preco) : "");
@@ -86,9 +88,11 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
             ? item.pathImage
             : `${API_BASE}${item.pathImage}`
         );
+      } else {
+        setPreviewImagem("");
       }
     }
-  }, [item, API_BASE]);
+  }
 
   // Handler de alteração do arquivo de imagem
   function handleImageChange(e) {
@@ -175,7 +179,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
 
           try {
             await atualizarFichaTecnicaPorCardapio(idCardapioSalvo, payloadFicha);
-          } catch (e) {
+          } catch {
             await criarFichaTecnica(payloadFicha);
           }
         }
