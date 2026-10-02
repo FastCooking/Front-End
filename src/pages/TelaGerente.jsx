@@ -20,6 +20,7 @@ import {
   MdShoppingBag,
   MdHistory,
   MdWarning,
+  MdQrCode2,
 } from "react-icons/md";
 
 import {
@@ -35,12 +36,16 @@ import {
   excluirItemCardapio,
 } from "../services/cardapioService";
 import { buscarInsumos, excluirInsumo } from "../services/insumosService";
+import { listarMesas, excluirMesa } from "../services/mesaService";
 
 import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
 import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
 import ModalResetarSenha from "../components/administrador/ModalResetarSenha";
 import ModalCardapio from "../components/cardapio/ModalCardapio";
 import ModalEstoque from "../components/insumos/ModalEstoque";
+import ModalMesa from "../components/mesas/ModalMesa";
+import ModalQrCodeMesa from "../components/mesas/ModalQrCodeMesa";
+import ModalPedidosMesa from "../components/mesas/ModalPedidosMesa";
 
 import FormularioFichaTec from "../components/insumos/FormularioFichaTec";
 
@@ -52,7 +57,7 @@ function getUserIdFromToken() {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
     return payload.sub ? Number(payload.sub) : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -99,6 +104,15 @@ function TelaGerente() {
   const [buscaEstoque, setBuscaEstoque] = useState("");
   const [modalEstoque, setModalEstoque] = useState(false);
   const [itemEstoqueEdicao, setItemEstoqueEdicao] = useState(null);
+
+  // Estados de Dados Mesas
+  const [mesas, setMesas] = useState([]);
+  const [carregandoMesas, setCarregandoMesas] = useState(false);
+  const [buscaMesa, setBuscaMesa] = useState("");
+  const [modalMesa, setModalMesa] = useState(false);
+  const [mesaEdicao, setMesaEdicao] = useState(null);
+  const [modalQrCode, setModalQrCode] = useState(null);
+  const [modalPedidosMesa, setModalPedidosMesa] = useState(null);
 
   // Cargos permitidos para o Gerente criar/editar (estritamente inferiores a Gerente)
   const CARGOS_PERMITIDOS_GERENTE = ["Garcom", "Cozinheiro"];
@@ -183,7 +197,7 @@ function TelaGerente() {
 
   useEffect(() => {
     if (abaAtiva === "usuarios") {
-      carregarUsuarios();
+      Promise.resolve().then(() => carregarUsuarios());
     }
   }, [abaAtiva, carregarUsuarios]);
 
@@ -202,7 +216,7 @@ function TelaGerente() {
 
   useEffect(() => {
     if (abaAtiva === "cardapio") {
-      carregarCardapio();
+      Promise.resolve().then(() => carregarCardapio());
     }
   }, [abaAtiva, carregarCardapio]);
 
@@ -221,9 +235,28 @@ function TelaGerente() {
 
   useEffect(() => {
     if (abaAtiva === "estoque") {
-      carregarEstoque();
+      Promise.resolve().then(() => carregarEstoque());
     }
   }, [abaAtiva, carregarEstoque]);
+
+  // 5. Carregar Mesas
+  const carregarMesas = useCallback(async () => {
+    try {
+      setCarregandoMesas(true);
+      const dados = await listarMesas(idRestauranteGerente);
+      setMesas(dados || []);
+    } catch (err) {
+      console.error("Erro ao carregar mesas:", err);
+    } finally {
+      setCarregandoMesas(false);
+    }
+  }, [idRestauranteGerente]);
+
+  useEffect(() => {
+    if (abaAtiva === "mesas") {
+      Promise.resolve().then(() => carregarMesas());
+    }
+  }, [abaAtiva, carregarMesas]);
 
   function dispararSucesso(msg) {
     setMensagemSucesso(msg);
@@ -306,6 +339,20 @@ function TelaGerente() {
     }
   }
 
+  async function handleExcluirMesa(mesa) {
+    const id = mesa.idMesa || mesa.id;
+    const confirmar = window.confirm(`Deseja realmente remover a Mesa ${mesa.numero}?`);
+    if (!confirmar) return;
+
+    try {
+      await excluirMesa(id);
+      dispararSucesso(`Mesa ${mesa.numero} removida com sucesso!`);
+      carregarMesas();
+    } catch (err) {
+      alert(err.message || "Erro ao remover mesa.");
+    }
+  }
+
   function handleLogout() {
     localStorage.removeItem("token");
     localStorage.removeItem("funcao");
@@ -340,6 +387,18 @@ function TelaGerente() {
     if (buscaEstoque.trim()) {
       const termo = buscaEstoque.toLowerCase().trim();
       return item.nome?.toLowerCase().includes(termo);
+    }
+    return true;
+  });
+
+  // Filtros de exibição das mesas
+  const mesasFiltradas = mesas.filter((m) => {
+    if (buscaMesa.trim()) {
+      const termo = buscaMesa.toLowerCase().trim();
+      return (
+        String(m.numero).includes(termo) ||
+        (m.status && m.status.toLowerCase().includes(termo))
+      );
     }
     return true;
   });
@@ -448,18 +507,6 @@ function TelaGerente() {
           >
             <MdSoupKitchen size={18} />
             Cozinha
-          </button>
-
-          <button
-            onClick={() => setAbaAtiva("pedidos")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
-              abaAtiva === "pedidos"
-                ? "bg-[#9C1C0E] text-white shadow-md"
-                : "bg-white/60 text-gray-700 hover:bg-white"
-            }`}
-          >
-            <MdShoppingBag size={18} />
-            Pedidos
           </button>
 
           <button
@@ -919,8 +966,138 @@ function TelaGerente() {
           </div>
         )}
 
-        {/* ================= ABAS MOCK (MESAS, COZINHA, PEDIDOS, HISTÓRICO) ================= */}
-        {(abaAtiva === "mesas" || abaAtiva === "cozinha" || abaAtiva === "pedidos" || abaAtiva === "historico") && (
+        {/* ================= ABA MESAS ================= */}
+        {abaAtiva === "mesas" && (
+          <div>
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6">
+              <div className="relative flex-1 max-w-md">
+                <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  type="text"
+                  placeholder="Buscar mesa por número ou status..."
+                  value={buscaMesa}
+                  onChange={(e) => setBuscaMesa(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+                />
+              </div>
+
+              <button
+                onClick={() => {
+                  setMesaEdicao(null);
+                  setModalMesa(true);
+                }}
+                className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all shrink-0"
+              >
+                <MdAdd size={20} />
+                Nova Mesa
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {mesasFiltradas.map((m) => {
+                const statusNormal = (m.status || "Disponivel").toLowerCase();
+                const temPedidos = m.pedidosAtivos && m.pedidosAtivos.length > 0;
+
+                let badgeClass = "bg-green-100 text-green-800 border-green-300";
+                let statusLabel = "Disponível";
+
+                if (temPedidos || statusNormal === "ocupada") {
+                  badgeClass = "bg-amber-100 text-amber-800 border-amber-300";
+                  statusLabel = "Ocupada";
+                } else if (statusNormal === "indisponivel") {
+                  badgeClass = "bg-red-100 text-red-800 border-red-300";
+                  statusLabel = "Indisponível";
+                }
+
+                return (
+                  <div
+                    key={m.idMesa || m.id}
+                    className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md border border-gray-200 p-5 flex flex-col justify-between hover:shadow-lg transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-10 h-10 rounded-xl bg-[#F9ECE5] text-[#9C1C0E] flex items-center justify-center font-bold text-lg border border-[#9C1C0E]/20">
+                            <MdTableBar size={22} />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-gray-900 text-base">
+                              Mesa {m.numero}
+                            </h3>
+                            <span className="text-[10px] text-gray-400 font-mono">
+                              {m.token || `tbl_${m.idMesa}`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`text-xs px-2.5 py-1 rounded-full font-bold border ${badgeClass}`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+
+                      {/* Pedidos Ativos Resumo */}
+                      <div className="mb-4">
+                        <button
+                          onClick={() => setModalPedidosMesa(m)}
+                          className="w-full flex items-center justify-between bg-gray-50 hover:bg-gray-100 border border-gray-200 p-2.5 rounded-xl text-left cursor-pointer transition-colors"
+                        >
+                          <span className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                            <MdShoppingBag className="text-[#9C1C0E]" size={16} />
+                            Pedidos Ativos:
+                          </span>
+                          <span className="text-xs font-bold text-[#9C1C0E]">
+                            {m.pedidosAtivos ? m.pedidosAtivos.length : 0}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Botões de Ação */}
+                    <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-1">
+                      <button
+                        onClick={() => setModalQrCode(m)}
+                        className="flex-1 flex items-center justify-center gap-1 bg-[#9C1C0E]/10 hover:bg-[#9C1C0E] text-[#9C1C0E] hover:text-white py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        title="Ver QR Code & Link"
+                      >
+                        <MdQrCode2 size={16} /> QR Code
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setMesaEdicao(m);
+                          setModalMesa(true);
+                        }}
+                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors cursor-pointer"
+                        title="Editar Mesa"
+                      >
+                        <MdEdit size={18} />
+                      </button>
+
+                      <button
+                        onClick={() => handleExcluirMesa(m)}
+                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                        title="Excluir Mesa"
+                      >
+                        <MdDelete size={18} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {mesasFiltradas.length === 0 && !carregandoMesas && (
+                <div className="col-span-full bg-white/80 p-8 rounded-2xl text-center text-gray-500 border border-gray-200">
+                  Nenhuma mesa cadastrada. Clique em "+ Nova Mesa" para adicionar.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================= ABAS MOCK (COZINHA, HISTÓRICO) ================= */}
+        {(abaAtiva === "cozinha" || abaAtiva === "historico") && (
           <div className="bg-white/80 backdrop-blur-xs p-12 rounded-2xl shadow-md border border-gray-200 text-center">
             <h2 className="text-xl font-bold text-[#9C1C0E] mb-2 capitalize">
               Módulo de {abaAtiva}
@@ -1004,6 +1181,41 @@ function TelaGerente() {
             dispararSucesso("Item de estoque salvo com sucesso!");
             carregarEstoque();
           }}
+        />
+      )}
+
+      {/* Modais de Mesas */}
+      {modalMesa && (
+        <ModalMesa
+          mesa={mesaEdicao}
+          idRestaurante={idRestauranteGerente}
+          onClose={() => {
+            setModalMesa(false);
+            setMesaEdicao(null);
+          }}
+          onSuccess={() => {
+            setModalMesa(false);
+            setMesaEdicao(null);
+            dispararSucesso("Dados da mesa salvos com sucesso!");
+            carregarMesas();
+          }}
+        />
+      )}
+
+      {modalQrCode && (
+        <ModalQrCodeMesa
+          mesa={modalQrCode}
+          onClose={() => setModalQrCode(null)}
+          onTokenRenovado={() => {
+            carregarMesas();
+          }}
+        />
+      )}
+
+      {modalPedidosMesa && (
+        <ModalPedidosMesa
+          mesa={modalPedidosMesa}
+          onClose={() => setModalPedidosMesa(null)}
         />
       )}
     </div>
