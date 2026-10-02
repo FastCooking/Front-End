@@ -4,29 +4,40 @@ import {
   criarItemCardapio,
 } from "../../services/cardapioService.js";
 
+const CATEGORIAS_PADRAO = [
+  "Pratos Principais",
+  "Entradas",
+  "Sobremesas",
+  "Bebidas",
+  "Acompanhamentos",
+  "Outros",
+];
+
 function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
-  const [categoria, setCategoria] = useState("");
+  const [categoria, setCategoria] = useState("Pratos Principais");
   const [disponivel, setDisponivel] = useState(true);
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    if (itemEmEdicao) {
-      setNome(itemEmEdicao.nome ?? "");
-      setPreco(itemEmEdicao.preco ?? "");
-      setCategoria(itemEmEdicao.categoria ?? "");
-      setDisponivel(itemEmEdicao.disponivel ?? true);
-    } else {
-      limparCampos();
-    }
+    Promise.resolve().then(() => {
+      if (itemEmEdicao) {
+        setNome(itemEmEdicao.nome ?? "");
+        setPreco(itemEmEdicao.preco ?? "");
+        setCategoria(itemEmEdicao.categoria ?? "Pratos Principais");
+        setDisponivel(itemEmEdicao.disponivel ?? true);
+      } else {
+        limparCampos();
+      }
+    });
   }, [itemEmEdicao]);
 
   function limparCampos() {
     setNome("");
     setPreco("");
-    setCategoria("");
+    setCategoria("Pratos Principais");
     setDisponivel(true);
   }
 
@@ -90,14 +101,18 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
       />
 
       <label htmlFor="categoria">Categoria</label>
-      <input
+      <select
         id="categoria"
-        type="text"
         value={categoria}
         onChange={(event) => setCategoria(event.target.value)}
-        placeholder="Ex.: Pratos principais"
         required
-      />
+      >
+        {CATEGORIAS_PADRAO.map((cat) => (
+          <option key={cat} value={cat}>
+            {cat}
+          </option>
+        ))}
+      </select>
 
       <label className="checkbox-label">
         <input
