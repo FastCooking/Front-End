@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MdPerson, MdVisibility, MdVisibilityOff } from "react-icons/md";
 import { criarUsuario } from "../../services/usuarioService";
 import { formatarCPF } from "../../utils/formatters";
