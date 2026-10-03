@@ -8,6 +8,7 @@ import TelaGarcom from './pages/TelaGarcom';
 import TelaCozinha from './pages/TelaCozinha';
 import TelaAdministrador from './pages/TelaAdministrador';
 import LandingPage from './pages/LandingPage';
+import TelaKDS from './pages/TelaKds';
 
 
 function App(){
@@ -20,6 +21,7 @@ function App(){
         <Route path="/garcom" element={<TelaGarcom />} />
         <Route path="/cozinha" element={<TelaCozinha />} />
         <Route path="/administrativo" element={<TelaAdministrador />} />
+        <Route path="/kds" element={<TelaKDS />} />
       </Routes>
     </BrowserRouter>
   );
