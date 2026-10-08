@@ -162,7 +162,6 @@ wss.on('connection', (ws, req) => {
   timers.push(itemTimer);
 
   // 3. Simula atualização de fila a cada 6 segundos
-  let queueTick = 0;
   const queueTimer = setInterval(() => {
     if (ws.readyState !== ws.OPEN || order.status === 'DELIVERED') {
       clearInterval(queueTimer);

@@ -140,7 +140,7 @@ export function useOrderTrackingSocket(orderId) {
   /**
    * Cria e retorna uma nova instância de WebSocket.
    */
-  const connect = useCallback(() => {
+  const connect = useCallback(function doConnect() {
     if (!orderId || !isMountedRef.current) return;
 
     // Limpa conexão anterior
@@ -205,7 +205,7 @@ export function useOrderTrackingSocket(orderId) {
 
         reconnectTimerRef.current = setTimeout(() => {
           if (isMountedRef.current) {
-            connect();
+            doConnect();
           }
         }, delay);
       };
@@ -223,8 +223,11 @@ export function useOrderTrackingSocket(orderId) {
     attemptRef.current = 0;
 
     if (!orderId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError('ID do pedido não informado.');
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoading(false);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConnectionStatus('DISCONNECTED');
       return;
     }

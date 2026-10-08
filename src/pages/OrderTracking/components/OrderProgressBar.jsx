@@ -33,7 +33,6 @@ export default function OrderProgressBar({ status }) {
         {STATUS_PROGRESSION.map((step, i) => {
           const isActive = i <= activeIndex && !isCancelled;
           const isCurrent = i === activeIndex && !isCancelled;
-          const styles = STATUS_STYLES[step];
 
           return (
             <div key={step} className="relative z-10 flex flex-col items-center flex-1">

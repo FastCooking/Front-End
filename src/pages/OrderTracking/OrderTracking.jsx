@@ -1,11 +1,9 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useOrderTrackingSocket } from './hooks/useOrderTrackingSocket';
-import { STATUS_LABELS } from './types';
 
 import ConnectionBanner from './components/ConnectionBanner';
 import OrderProgressBar from './components/OrderProgressBar';
 import OrderItemCard from './components/OrderItemCard';
-import StatusBadge from './components/StatusBadge';
 import OrderTrackingSkeleton from './components/OrderTrackingSkeleton';
 import OrderNotFound from './components/OrderNotFound';
 
