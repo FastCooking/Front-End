@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { MdPerson, MdVisibility, MdVisibilityOff } from "react-icons/md";
 import { criarUsuario } from "../../services/usuarioService";
 import { formatarCPF } from "../../utils/formatters";
@@ -11,9 +11,17 @@ function ModalNovoUsuario({
   onClose,
   onSuccess,
 }) {
-  const [idRestaurante, setIdRestaurante] = useState(
-    restaurantePreSelecionado ? String(restaurantePreSelecionado) : ""
-  );
+  // Filtra apenas restaurantes ativos e válidos (não removidos/anonimizados)
+  const restaurantesDisponiveis = (restaurantes || []).filter((r) => {
+    if (r.status === false) return false;
+    if (r.nome && r.nome.toUpperCase().includes("RESTAURANTE REMOVIDO")) return false;
+    return true;
+  });
+
+  const [idRestaurante, setIdRestaurante] = useState(() => {
+    if (restaurantePreSelecionado) return String(restaurantePreSelecionado);
+    return restaurantesDisponiveis.length > 0 ? String(restaurantesDisponiveis[0].idRestaurante) : "";
+  });
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
@@ -24,21 +32,13 @@ function ModalNovoUsuario({
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
-  // Filtra apenas restaurantes ativos e válidos (não removidos/anonimizados)
-  const restaurantesDisponiveis = (restaurantes || []).filter((r) => {
-    if (r.status === false) return false;
-    if (r.nome && r.nome.toUpperCase().includes("RESTAURANTE REMOVIDO")) return false;
-    return true;
-  });
-
-  // Atualiza a seleção inicial caso não esteja setada ou seja um restaurante removido
-  useEffect(() => {
+  const [prevPreSelecionado, setPrevPreSelecionado] = useState(restaurantePreSelecionado);
+  if (restaurantePreSelecionado !== prevPreSelecionado) {
+    setPrevPreSelecionado(restaurantePreSelecionado);
     if (restaurantePreSelecionado) {
       setIdRestaurante(String(restaurantePreSelecionado));
-    } else if (!idRestaurante && restaurantesDisponiveis.length > 0) {
-      setIdRestaurante(String(restaurantesDisponiveis[0].idRestaurante));
     }
-  }, [restaurantePreSelecionado, restaurantesDisponiveis]);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MdStore,
@@ -79,16 +79,7 @@ function TelaAdministrador() {
     }
   }, [navigate]);
 
-  // Carregar dados
-  useEffect(() => {
-    carregarRestaurantes();
-  }, [buscaRestaurante]);
-
-  useEffect(() => {
-    carregarUsuarios();
-  }, [filtroRestauranteUsuario, filtroFuncaoUsuario, buscaUsuario]);
-
-  async function carregarRestaurantes() {
+  const carregarRestaurantes = useCallback(async () => {
     try {
       setCarregando(true);
       const params = {};
@@ -105,9 +96,9 @@ function TelaAdministrador() {
     } finally {
       setCarregando(false);
     }
-  }
+  }, [buscaRestaurante]);
 
-  async function carregarUsuarios() {
+  const carregarUsuarios = useCallback(async () => {
     try {
       setCarregando(true);
       const params = {};
@@ -132,7 +123,28 @@ function TelaAdministrador() {
     } finally {
       setCarregando(false);
     }
-  }
+  }, [filtroRestauranteUsuario, filtroFuncaoUsuario, buscaUsuario]);
+
+  // Carregar dados
+  useEffect(() => {
+    let ativo = true;
+    Promise.resolve().then(() => {
+      if (ativo) carregarRestaurantes();
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [carregarRestaurantes]);
+
+  useEffect(() => {
+    let ativo = true;
+    Promise.resolve().then(() => {
+      if (ativo) carregarUsuarios();
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [carregarUsuarios]);
 
   function dispararSucesso(msg) {
     setMensagemSucesso(msg);
