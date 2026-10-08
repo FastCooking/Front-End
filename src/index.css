@@ -46,3 +46,23 @@
 .animate-bounce-slow {
   animation: bounce-slow 3s ease-in-out infinite;
 }
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-spin-slow {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

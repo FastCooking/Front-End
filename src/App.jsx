@@ -9,6 +9,7 @@ import TelaCozinha from './pages/TelaCozinha';
 import TelaAdministrador from './pages/TelaAdministrador';
 import TelaGerente from './pages/TelaGerente';
 import LandingPage from './pages/LandingPage';
+import OrderTracking from './pages/OrderTracking';
 
 
 function App(){
@@ -22,6 +23,8 @@ function App(){
         <Route path="/cozinha" element={<TelaCozinha />} />
         <Route path="/administrativo" element={<TelaAdministrador />} />
         <Route path="/gerente" element={<TelaGerente />} />
+        <Route path="/tracking/:orderId" element={<OrderTracking />} />
+        <Route path="/tracking" element={<OrderTracking />} />
       </Routes>
     </BrowserRouter>
   );
