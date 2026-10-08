@@ -1,4 +1,4 @@
-import { STATUS_LABELS, STATUS_STYLES, STATUS_PROGRESSION } from '../types';
+import { STATUS_LABELS, STATUS_PROGRESSION } from '../types';
 
 /**
  * Barra de progresso horizontal que mostra a evolução do pedido

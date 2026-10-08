@@ -223,12 +223,13 @@ export function useOrderTrackingSocket(orderId) {
     attemptRef.current = 0;
 
     if (!orderId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setError('ID do pedido não informado.');
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsLoading(false);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setConnectionStatus('DISCONNECTED');
+      setTimeout(() => {
+        if (isMountedRef.current) {
+          setError('ID do pedido não informado.');
+          setIsLoading(false);
+          setConnectionStatus('DISCONNECTED');
+        }
+      }, 0);
       return;
     }
 

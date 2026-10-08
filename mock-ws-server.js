@@ -168,7 +168,6 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    queueTick++;
     const newMin = Math.max(5, order.estimatedMinutesMin - 3);
     const newMax = Math.max(8, order.estimatedMinutesMax - 4);
     const newPos = Math.max(1, order.queuePosition - 1);
