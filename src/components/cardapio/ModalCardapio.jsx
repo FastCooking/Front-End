@@ -146,7 +146,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       };
 
       if (idRestaurante) {
-        dadosItem.idRestaurante = Number(idRestaurante);
+        dadosItem.idRestaurante = idRestaurante;
       }
 
       let resItem;

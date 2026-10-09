@@ -162,7 +162,7 @@ function TelaGerente() {
       const dados = await listarUsuarios(params);
 
       const usuariosValidos = (dados || []).filter((u) => {
-        if (idRestauranteGerente && Number(u.idRestaurante) !== Number(idRestauranteGerente)) {
+        if (idRestauranteGerente && String(u.idRestaurante) !== String(idRestauranteGerente)) {
           return false;
         }
         const nomeUpper = u.nome?.toUpperCase() || "";
