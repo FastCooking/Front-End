@@ -1,5 +1,7 @@
+import React, { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useOrderTrackingSocket } from './hooks/useOrderTrackingSocket';
+import { chamarGarcom } from '../../services/pedidoService';
 
 import ConnectionBanner from './components/ConnectionBanner';
 import OrderProgressBar from './components/OrderProgressBar';
@@ -54,6 +56,27 @@ export default function OrderTracking() {
     isLoading,
     reconnectAttempt,
   } = useOrderTrackingSocket(orderId);
+
+  const [chamandoGarcom, setChamandoGarcom] = useState(false);
+  const [alertaGarcom, setAlertaGarcom] = useState(null);
+
+  async function handleChamarGarcom() {
+    const mesaId = order?.idMesa;
+    if (!mesaId) {
+      alert('Identificação da mesa não disponível neste pedido.');
+      return;
+    }
+    setChamandoGarcom(true);
+    try {
+      await chamarGarcom(mesaId);
+      setAlertaGarcom('🛎️ Garçom chamado com sucesso! Aguarde em sua mesa.');
+      setTimeout(() => setAlertaGarcom(null), 6000);
+    } catch (err) {
+      alert(`Erro ao chamar garçom: ${err.message}`);
+    } finally {
+      setChamandoGarcom(false);
+    }
+  }
 
   // ─── Estado: sem orderId ──────────────────────────────────────
   if (!orderId) {
@@ -113,6 +136,17 @@ export default function OrderTracking() {
                 Mesa {order.tableNumber}
               </span>
             )}
+            {order?.idMesa && (
+              <button
+                onClick={handleChamarGarcom}
+                disabled={chamandoGarcom}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95 ml-2"
+                title="Chamar o garçom até a sua mesa"
+              >
+                <span>🛎️</span>
+                <span>{chamandoGarcom ? 'Chamando...' : 'Chamar Garçom'}</span>
+              </button>
+            )}
             {order?.createdAt && (
               <span className="inline-flex items-center gap-1">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -123,6 +157,13 @@ export default function OrderTracking() {
               </span>
             )}
           </div>
+
+          {alertaGarcom && (
+            <div className="mt-4 p-3 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-md flex items-center justify-between animate-bounce">
+              <span>{alertaGarcom}</span>
+              <button onClick={() => setAlertaGarcom(null)} className="ml-2 bg-emerald-800 px-2 py-0.5 rounded text-[10px]">✕</button>
+            </div>
+          )}
         </header>
 
         {/* ─── Tempo Estimado de Entrega ──────────────────────── */}

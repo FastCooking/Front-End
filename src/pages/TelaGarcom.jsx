@@ -5,6 +5,10 @@ import {
   liberarSobremesa,
   listarMesas,
   abrirMesa,
+  cancelarItemPedido,
+  atenderChamadoMesa,
+  obterChamadosAtivos,
+  obterPedidoAtivoMesa,
 } from '../services/pedidoService';
 import logo from '../assets/fast cooking logo.png';
 
@@ -20,16 +24,18 @@ export default function TelaGarcom() {
 
   const [pratosProntos, setPratosProntos] = useState([]);
   const [mesas, setMesas] = useState([]);
+  const [chamadosMesa, setChamadosMesa] = useState([]);
   const [statusConexao, setStatusConexao] = useState('CONECTANDO');
   const [notificacaoAlerta, setNotificacaoAlerta] = useState(null);
   const [processando, setProcessando] = useState(false);
-  const [idMesaParaAbrir, setIdMesaParaAbrir] = useState('');
+  const [comandaModal, setComandaModal] = useState(null);
+  const [carregandoComanda, setCarregandoComanda] = useState(false);
   const [usuario, setUsuario] = useState(null);
 
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
 
-  // Carrega usuário e mesas iniciais
+  // Carrega usuário
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
@@ -51,11 +57,23 @@ export default function TelaGarcom() {
     }
   }, [usuario]);
 
+  const carregarChamados = useCallback(async () => {
+    try {
+      const idRestaurante = usuario?.idRestaurante;
+      if (!idRestaurante) return;
+      const data = await obterChamadosAtivos(idRestaurante).catch(() => []);
+      setChamadosMesa(data || []);
+    } catch (err) {
+      console.warn('Erro ao carregar chamados das mesas:', err);
+    }
+  }, [usuario]);
+
   useEffect(() => {
     carregarMesas();
-  }, [carregarMesas]);
+    carregarChamados();
+  }, [carregarMesas, carregarChamados]);
 
-  // Conexão WebSocket para Garçom (RF06 Notificação Pedido Pronto)
+  // Conexão WebSocket para Garçom
   const conectarWs = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
@@ -80,6 +98,7 @@ export default function TelaGarcom() {
         try {
           const payload = JSON.parse(event.data);
 
+          // RF06: Notificação de Prato Pronto
           if (payload.type === 'item.status_changed' && payload.item) {
             const item = payload.item;
             if (item.status === 'Pronto') {
@@ -95,6 +114,35 @@ export default function TelaGarcom() {
                 prev.filter((p) => p.idItemPedido !== item.idItemPedido)
               );
             }
+
+            // Se a comanda aberta no modal for afetada, atualiza seu status
+            setComandaModal((prev) => {
+              if (!prev || !prev.itens) return prev;
+              const afetaModal = prev.itens.some((it) => it.idItemPedido === item.idItemPedido);
+              if (!afetaModal) return prev;
+              return {
+                ...prev,
+                itens: prev.itens.map((it) =>
+                  it.idItemPedido === item.idItemPedido ? { ...it, status: item.status } : it
+                ),
+              };
+            });
+          }
+
+          // Chamados de mesa em tempo real
+          if (payload.type === 'mesa.garcom_chamado' && payload.mesa) {
+            const mesaChamada = payload.mesa;
+            setChamadosMesa((prev) => {
+              const existe = prev.some((c) => c.idMesa === mesaChamada.idMesa);
+              if (existe) return prev;
+              return [mesaChamada, ...prev];
+            });
+            setNotificacaoAlerta(`🛎️ CHAMADO: Mesa #${mesaChamada.numero} solicitou o Garçom!`);
+          } else if (payload.type === 'mesa.garcom_atendido' && payload.mesa) {
+            const mesaChamada = payload.mesa;
+            setChamadosMesa((prev) =>
+              prev.filter((c) => c.idMesa !== mesaChamada.idMesa)
+            );
           }
         } catch {
           // ignore
@@ -153,6 +201,60 @@ export default function TelaGarcom() {
     }
   }
 
+  async function handleAtenderChamado(idMesa) {
+    setProcessando(true);
+    try {
+      await atenderChamadoMesa(idMesa);
+      setChamadosMesa((prev) => prev.filter((c) => c.idMesa !== idMesa));
+    } catch (err) {
+      alert(`Erro ao atender chamado: ${err.message}`);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  async function handleVerComanda(mesa) {
+    setCarregandoComanda(true);
+    try {
+      const dados = await obterPedidoAtivoMesa(mesa.idMesa);
+      setComandaModal({
+        mesa,
+        pedido: dados.pedido,
+        itens: dados.itens || [],
+      });
+    } catch (err) {
+      alert(`Não há pedido ativo ou comanda encontrada para a Mesa #${mesa.numero}.`);
+    } finally {
+      setCarregandoComanda(false);
+    }
+  }
+
+  async function handleCancelarItem(item) {
+    const confirmou = window.confirm(
+      `Deseja realmente cancelar o item "${item.nomeItem || 'Item'}" (Qtd: ${item.quantidade}) da Mesa #${comandaModal?.mesa?.numero}?`
+    );
+    if (!confirmou) return;
+
+    setProcessando(true);
+    try {
+      await cancelarItemPedido(item.idItemPedido);
+      setComandaModal((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          itens: prev.itens.map((it) =>
+            it.idItemPedido === item.idItemPedido ? { ...it, status: 'Cancelado' } : it
+          ),
+        };
+      });
+      alert('Item cancelado com sucesso!');
+    } catch (err) {
+      alert(`Não foi possível cancelar o item: ${err.message}`);
+    } finally {
+      setProcessando(false);
+    }
+  }
+
   function handleLogout() {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
@@ -170,7 +272,7 @@ export default function TelaGarcom() {
             <img src={logo} alt="FastCooking Logo" className="h-10 w-auto object-contain" />
             <div>
               <h1 className="text-xl font-black text-[#b84226]">FastCooking Garçom</h1>
-              <p className="text-xs text-stone-500">Notificações em Tempo Real e Entregas</p>
+              <p className="text-xs text-stone-500">Notificações em Tempo Real, Entregas e Salão</p>
             </div>
           </div>
 
@@ -185,7 +287,7 @@ export default function TelaGarcom() {
                 }`}
               />
               <span className="text-stone-600">
-                {statusConexao === 'CONECTADO' ? 'Prontos Ativo' : 'Conectando...'}
+                {statusConexao === 'CONECTADO' ? 'Tempo Real Ativo' : 'Conectando...'}
               </span>
             </div>
 
@@ -199,14 +301,16 @@ export default function TelaGarcom() {
         </div>
       </header>
 
-      {/* Alerta de Notificação em Tempo Real (RF06) */}
+      {/* Alerta de Notificação em Tempo Real */}
       {notificacaoAlerta && (
         <div className="max-w-6xl mx-auto mt-4 px-4">
-          <div className="bg-emerald-600 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-bounce">
-            <span className="font-extrabold text-sm">{notificacaoAlerta}</span>
+          <div className="bg-amber-500 text-white p-4 rounded-xl shadow-lg flex items-center justify-between animate-bounce">
+            <span className="font-extrabold text-sm flex items-center gap-2">
+              <span>📢</span> {notificacaoAlerta}
+            </span>
             <button
               onClick={() => setNotificacaoAlerta(null)}
-              className="bg-emerald-800 hover:bg-emerald-900 text-xs font-bold px-3 py-1 rounded-md"
+              className="bg-amber-700 hover:bg-amber-800 text-xs font-bold px-3 py-1 rounded-md"
             >
               Entendido
             </button>
@@ -216,6 +320,46 @@ export default function TelaGarcom() {
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto p-4 space-y-8 mt-2">
+        {/* Chamados de Atendimento das Mesas */}
+        {chamadosMesa.length > 0 && (
+          <section className="bg-amber-50 border-2 border-amber-400 rounded-2xl p-5 shadow-md">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-black text-amber-900 flex items-center gap-2">
+                <span>🛎️</span> Chamados de Atendimento Urgentes
+              </h2>
+              <span className="bg-amber-600 text-white text-xs font-black px-3 py-1 rounded-full animate-pulse">
+                {chamadosMesa.length} {chamadosMesa.length === 1 ? 'chamado' : 'chamados'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {chamadosMesa.map((chamado) => (
+                <div
+                  key={chamado.idMesa}
+                  className="bg-white border border-amber-300 rounded-xl p-4 shadow-sm flex items-center justify-between"
+                >
+                  <div>
+                    <span className="text-lg font-black text-stone-900">
+                      Mesa #{chamado.numero}
+                    </span>
+                    <p className="text-xs text-amber-700 font-bold mt-0.5">
+                      Cliente solicitando atendimento
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => handleAtenderChamado(chamado.idMesa)}
+                    disabled={processando}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-black px-3 py-2 rounded-lg shadow-xs transition-colors"
+                  >
+                    ✓ Atender
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Pratos Prontos para Entrega */}
         <section>
           <div className="flex items-center justify-between mb-4">
@@ -224,7 +368,7 @@ export default function TelaGarcom() {
                 <span>🍽️</span> Pratos Prontos para Entrega na Mesa
               </h2>
               <p className="text-xs text-stone-500">
-                Dishes finalizados pela cozinha aguardando entrega imediata (RF06)
+                Pratos finalizados pela cozinha aguardando entrega imediata (RF06)
               </p>
             </div>
             <span className="bg-[#b84226] text-white text-xs font-extrabold px-3 py-1 rounded-full">
@@ -236,7 +380,7 @@ export default function TelaGarcom() {
             <div className="bg-white rounded-2xl border border-dashed border-stone-300 p-12 text-center text-stone-400">
               <span className="text-4xl">✨</span>
               <p className="text-base font-bold text-stone-600 mt-2">Nenhum prato aguardando entrega no momento</p>
-              <p className="text-xs text-stone-400">Assim que a cozinha concluir um prato, o alarme tocará aqui.</p>
+              <p className="text-xs text-stone-400">Assim que a cozinha concluir um prato, o alerta tocará aqui.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -286,11 +430,14 @@ export default function TelaGarcom() {
               <h2 className="text-lg font-black text-stone-900 flex items-center gap-2">
                 <span>🪑</span> Mesas do Salão
               </h2>
-              <p className="text-xs text-stone-500">Status atual das mesas e comandas</p>
+              <p className="text-xs text-stone-500">Status atual das mesas, comandas e cancelamento de itens</p>
             </div>
 
             <button
-              onClick={carregarMesas}
+              onClick={() => {
+                carregarMesas();
+                carregarChamados();
+              }}
               className="text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-3 py-1.5 rounded-lg border border-stone-300"
             >
               🔄 Recarregar Mesas
@@ -305,12 +452,15 @@ export default function TelaGarcom() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {mesas.map((mesa) => {
                 const isOcupada = mesa.status === 'Indisponivel' || mesa.status === 'Ocupada';
+                const temChamado = chamadosMesa.some((c) => c.idMesa === mesa.idMesa);
 
                 return (
                   <div
                     key={mesa.idMesa}
                     className={`rounded-xl p-4 border flex flex-col justify-between text-center transition-all ${
-                      isOcupada
+                      temChamado
+                        ? 'bg-amber-100/90 border-amber-400 ring-2 ring-amber-400 animate-pulse'
+                        : isOcupada
                         ? 'bg-amber-50/70 border-amber-300'
                         : 'bg-white border-stone-200 hover:border-stone-400'
                     }`}
@@ -319,8 +469,8 @@ export default function TelaGarcom() {
                       <span className="text-xl font-black text-stone-900">
                         #{mesa.numero}
                       </span>
-                      <p className={`text-[11px] font-extrabold mt-1 ${isOcupada ? 'text-amber-700' : 'text-emerald-700'}`}>
-                        {isOcupada ? 'Em Atendimento' : 'Disponível'}
+                      <p className={`text-[11px] font-extrabold mt-1 ${temChamado ? 'text-amber-800' : isOcupada ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {temChamado ? '🛎️ Chamando Garçom' : isOcupada ? 'Em Atendimento' : 'Disponível'}
                       </p>
                     </div>
 
@@ -335,10 +485,21 @@ export default function TelaGarcom() {
                         </button>
                       ) : (
                         <button
-                          onClick={() => navigate(`/cardapio?idMesa=${mesa.idMesa}&idRestaurante=${mesa.idRestaurante}`)}
-                          className="w-full text-xs bg-[#b84226] hover:bg-[#9c351c] text-white font-bold py-1.5 rounded-lg"
+                          onClick={() => handleVerComanda(mesa)}
+                          disabled={carregandoComanda}
+                          className="w-full text-xs bg-[#b84226] hover:bg-[#9c351c] text-white font-bold py-1.5 rounded-lg transition-colors"
                         >
                           Ver Comanda
+                        </button>
+                      )}
+
+                      {temChamado && (
+                        <button
+                          onClick={() => handleAtenderChamado(mesa.idMesa)}
+                          disabled={processando}
+                          className="w-full text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 rounded-lg"
+                        >
+                          Atender
                         </button>
                       )}
                     </div>
@@ -349,6 +510,121 @@ export default function TelaGarcom() {
           )}
         </section>
       </main>
+
+      {/* Modal de Detalhes da Comanda com Cancelamento de Itens */}
+      {comandaModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200">
+              <div>
+                <h3 className="text-lg font-black text-stone-900">
+                  Comanda — Mesa #{comandaModal.mesa.numero}
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Status do Pedido: <strong className="text-[#b84226]">{comandaModal.pedido?.status || 'Aberto'}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setComandaModal(null)}
+                className="text-stone-400 hover:text-stone-700 font-bold text-lg p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Lista de Itens */}
+            <div className="overflow-y-auto py-4 space-y-3 flex-1">
+              {comandaModal.itens.length === 0 ? (
+                <p className="text-center text-sm text-stone-400 py-6">
+                  Nenhum item adicionado a este pedido ainda.
+                </p>
+              ) : (
+                comandaModal.itens.map((item) => {
+                  const podeCancelar = item.status === 'Pendente';
+
+                  return (
+                    <div
+                      key={item.idItemPedido}
+                      className="p-3.5 rounded-xl border border-stone-200 bg-stone-50/70 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-stone-900 text-sm">
+                            {item.quantidade}x {item.nomeItem || 'Item'}
+                          </span>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              item.status === 'Pendente'
+                                ? 'bg-amber-100 text-amber-800'
+                                : item.status === 'Em preparo'
+                                ? 'bg-orange-100 text-orange-800'
+                                : item.status === 'Pronto'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : item.status === 'Entregue'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </div>
+                        {item.observacao && (
+                          <p className="text-xs text-stone-500 italic mt-0.5">
+                            Obs: {item.observacao}
+                          </p>
+                        )}
+                        <p className="text-xs text-stone-600 mt-1">
+                          R$ {Number(item.precoUnitario || 0).toFixed(2)} cada
+                        </p>
+                      </div>
+
+                      {/* Botão de Cancelamento para Itens Pendentes */}
+                      {podeCancelar ? (
+                        <button
+                          onClick={() => handleCancelarItem(item)}
+                          disabled={processando}
+                          className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                          title="Cancelar item antes do preparo"
+                        >
+                          <span>✕</span>
+                          <span>Cancelar Item</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-stone-400 italic">
+                          {item.status === 'Cancelado'
+                            ? 'Cancelado'
+                            : 'Preparo iniciado'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-stone-500">Total da Comanda:</span>
+                <p className="text-base font-extrabold text-stone-900">
+                  R${' '}
+                  {comandaModal.itens
+                    .filter((it) => it.status !== 'Cancelado')
+                    .reduce((acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1), 0)
+                    .toFixed(2)}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setComandaModal(null)}
+                className="bg-stone-900 hover:bg-black text-white text-xs font-bold px-5 py-2.5 rounded-xl"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
