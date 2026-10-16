@@ -1,11 +1,13 @@
+import { renovarToken, getAuthHeaders, fetchComAuth } from './apiClient';
+
 const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 const API_URL = `${BASE_URL}/auth`;
 
 /**
- * Realiza login na API e retorna o token JWT e a função do usuário.
+ * Realiza login na API e retorna o token JWT, refresh token e dados do usuário.
  * @param {string} email
  * @param {string} senha
- * @returns {{ access_token: string, token_type: string, funcao: string }}
+ * @returns {Promise<{ access_token: string, refresh_token: string, token_type: string, funcao: string, idUsuario?: string, idRestaurante?: string, nome?: string }>}
  */
 export async function login(email, senha) {
     const resposta = await fetch(`${API_URL}/login`, {
@@ -19,5 +21,8 @@ export async function login(email, senha) {
         throw new Error(erro.detail ?? 'Credenciais inválidas');
     }
 
-    return resposta.json();
+    const dados = await resposta.json();
+    return dados;
 }
+
+export { renovarToken, getAuthHeaders, fetchComAuth };
