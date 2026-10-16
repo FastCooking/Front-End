@@ -15,7 +15,7 @@ function TelaKDS() {
   }
 
   useEffect(() => {
-    carregarFila();
+    Promise.resolve().then(() => carregarFila());
 
     const intervalo = setInterval(() => {
       carregarFila();

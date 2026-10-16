@@ -41,6 +41,12 @@ function TelaLogin(){
                 const dados =  await mockLogin(email, senha);
                 console.log('Login bem-sucedido:', dados);
 
+                localStorage.setItem('usuarioLogado', JSON.stringify({
+                    email,
+                    perfil: dados.perfil,
+                    nome: email === 'garcom@test.com' ? 'Garçom Carlos' : email.split('@')[0]
+                }));
+
                 setErro('');
                 setTentativas(0);
 
