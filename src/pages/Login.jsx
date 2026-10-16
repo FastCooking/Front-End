@@ -42,6 +42,7 @@ function TelaLogin(){
 
                 localStorage.setItem('token', dados.access_token);
                 localStorage.setItem('funcao', dados.funcao);
+                localStorage.setItem('user', JSON.stringify(dados));
 
                 setErro('');
                 setTentativas(0);
