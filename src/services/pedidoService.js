@@ -137,3 +137,73 @@ export async function listarMesas(idRestaurante) {
 
   return response.json();
 }
+
+export async function cancelarItemPedido(idItemPedido) {
+  const response = await fetch(`${BASE_URL}/pedidos/itens/${idItemPedido}/cancelar`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao cancelar item do pedido.');
+  }
+
+  return response.json();
+}
+
+export async function chamarGarcom(idMesa) {
+  const response = await fetch(`${BASE_URL}/mesas/${idMesa}/chamar-garcom`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao chamar garçom.');
+  }
+
+  return response.json();
+}
+
+export async function atenderChamadoMesa(idMesa) {
+  const response = await fetch(`${BASE_URL}/mesas/${idMesa}/atender-chamado`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao atender chamado da mesa.');
+  }
+
+  return response.json();
+}
+
+export async function obterChamadosAtivos(idRestaurante) {
+  const response = await fetch(`${BASE_URL}/mesas/chamados/ativos?idRestaurante=${idRestaurante}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao obter chamados ativos.');
+  }
+
+  return response.json();
+}
+
+export async function obterPedidoAtivoMesa(idMesa) {
+  const response = await fetch(`${BASE_URL}/mesas/${idMesa}/pedido-ativo`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao obter comanda ativa da mesa.');
+  }
+
+  return response.json();
+}

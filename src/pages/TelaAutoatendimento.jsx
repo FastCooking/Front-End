@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { listarItensCardapio } from '../services/cardapioService';
-import { abrirMesa, criarPedido, adicionarItensAoPedido } from '../services/pedidoService';
+import { abrirMesa, criarPedido, adicionarItensAoPedido, chamarGarcom } from '../services/pedidoService';
 import logo from '../assets/fast cooking logo.png';
 
 export default function TelaAutoatendimento() {
@@ -26,7 +26,26 @@ export default function TelaAutoatendimento() {
   const [isCarrinhoAberto, setIsCarrinhoAberto] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
+  const [chamandoGarcom, setChamandoGarcom] = useState(false);
+  const [msgSucesso, setMsgSucesso] = useState(null);
   const [erro, setErro] = useState(null);
+
+  async function handleChamarGarcom() {
+    if (!mesaInfo.idMesa) {
+      alert('Identificação da mesa não encontrada para chamar o garçom.');
+      return;
+    }
+    setChamandoGarcom(true);
+    try {
+      await chamarGarcom(mesaInfo.idMesa);
+      setMsgSucesso('🛎️ Garçom chamado! Nossa equipe já foi notificada e está vindo até a sua mesa.');
+      setTimeout(() => setMsgSucesso(null), 6000);
+    } catch (err) {
+      setErro(err.message || 'Erro ao chamar garçom.');
+    } finally {
+      setChamandoGarcom(false);
+    }
+  }
 
   // Inicializa mesa e sessão
   useEffect(() => {
@@ -185,12 +204,33 @@ export default function TelaAutoatendimento() {
               </p>
             </div>
           </div>
-          {mesaInfo.numero && (
-            <span className="bg-[#b84226]/10 text-[#b84226] text-xs font-bold px-3 py-1 rounded-full">
-              Mesa #{mesaInfo.numero}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {mesaInfo.idMesa && (
+              <button
+                onClick={handleChamarGarcom}
+                disabled={chamandoGarcom}
+                className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
+                title="Solicitar a presença do garçom nesta mesa"
+              >
+                <span>🛎️</span>
+                <span>{chamandoGarcom ? 'Chamando...' : 'Chamar Garçom'}</span>
+              </button>
+            )}
+
+            {mesaInfo.numero && (
+              <span className="bg-[#b84226]/10 text-[#b84226] text-xs font-bold px-3 py-1 rounded-full">
+                Mesa #{mesaInfo.numero}
+              </span>
+            )}
+          </div>
         </div>
+
+        {msgSucesso && (
+          <div className="max-w-4xl mx-auto mt-2 p-2.5 bg-emerald-600 text-white text-xs font-extrabold rounded-lg flex items-center justify-between shadow-md animate-bounce">
+            <span>{msgSucesso}</span>
+            <button onClick={() => setMsgSucesso(null)} className="ml-2 bg-emerald-800 px-2 py-0.5 rounded text-[10px]">✕</button>
+          </div>
+        )}
       </header>
 
       {/* Categorias Tabs */}
