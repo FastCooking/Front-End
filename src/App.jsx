@@ -10,6 +10,7 @@ import TelaAdministrador from './pages/TelaAdministrador';
 import TelaGerente from './pages/TelaGerente';
 import LandingPage from './pages/LandingPage';
 import OrderTracking from './pages/OrderTracking';
+import TelaAutoatendimento from './pages/TelaAutoatendimento';
 
 
 function App(){
@@ -18,6 +19,7 @@ function App(){
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<TelaLogin />} />
+        <Route path="/cardapio" element={<TelaAutoatendimento />} />
         <Route path="/insumo" element={<TelaInsumo />} />
         <Route path="/garcom" element={<TelaGarcom />} />
         <Route path="/cozinha" element={<TelaCozinha />} />
