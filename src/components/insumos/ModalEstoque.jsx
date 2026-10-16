@@ -2,7 +2,7 @@ import { useState } from "react";
 import { MdInventory } from "react-icons/md";
 import { criarInsumos, atualizarInsumo } from "../../services/insumosService";
 
-function ModalEstoque({ item, onClose, onSuccess }) {
+function ModalEstoque({ item, idRestaurante, onClose, onSuccess }) {
   const [nome, setNome] = useState("");
   const [quantidadeEmEstoque, setQuantidadeEmEstoque] = useState("");
   const [quantidadeMinima, setQuantidadeMinima] = useState("");
@@ -67,6 +67,7 @@ function ModalEstoque({ item, onClose, onSuccess }) {
         quantidadeEmEstoque: qtdEstoque,
         quantidadeMinima: qtdMin,
         unidadeMedida,
+        idRestaurante: idRestaurante || item?.idRestaurante,
       };
 
       if (item && (item.idEstoque || item.id)) {

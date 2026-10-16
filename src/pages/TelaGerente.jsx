@@ -51,7 +51,7 @@ function getUserIdFromToken() {
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ? Number(payload.sub) : null;
+    return payload.sub ? String(payload.sub) : null;
   } catch {
     return null;
   }
@@ -162,7 +162,7 @@ function TelaGerente() {
       const dados = await listarUsuarios(params);
 
       const usuariosValidos = (dados || []).filter((u) => {
-        if (idRestauranteGerente && Number(u.idRestaurante) !== Number(idRestauranteGerente)) {
+        if (idRestauranteGerente && String(u.idRestaurante) !== String(idRestauranteGerente)) {
           return false;
         }
         const nomeUpper = u.nome?.toUpperCase() || "";
@@ -931,7 +931,7 @@ function TelaGerente() {
                 <h2 className="text-lg font-bold text-[#9C1C0E] mb-4 text-center">
                   Atribuir Ficha Técnica a Prato do Cardápio
                 </h2>
-                <FormularioFichaTec />
+                <FormularioFichaTec idRestaurante={idRestauranteGerente} />
               </div>
             )}
           </div>
@@ -1012,6 +1012,7 @@ function TelaGerente() {
       {modalEstoque && (
         <ModalEstoque
           item={itemEstoqueEdicao}
+          idRestaurante={idRestauranteGerente}
           onClose={() => {
             setModalEstoque(false);
             setItemEstoqueEdicao(null);

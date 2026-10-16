@@ -56,9 +56,9 @@ function FormularioFichaTec() {
     try {
       setSalvando(true);
       const fichaTecnica = {
-        idCardapio: parseInt(idCardapio),
+        idCardapio: String(idCardapio),
         insumos: insumoDaFicha.map((item) => ({
-          idEstoque: parseInt(item.idInsumo),
+          idEstoque: String(item.idInsumo),
           quantidadeNecessaria: parseFloat(item.quantidadeNecessaria),
         })),
       };
