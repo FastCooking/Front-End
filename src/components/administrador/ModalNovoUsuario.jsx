@@ -63,7 +63,7 @@ function ModalNovoUsuario({
 
     try {
       await criarUsuario({
-        idRestaurante: Number(idRestaurante),
+        idRestaurante: String(idRestaurante),
         nome: nome.trim(),
         cpf,
         email: email.trim(),

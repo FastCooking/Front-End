@@ -150,7 +150,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       };
 
       if (idRestaurante) {
-        dadosItem.idRestaurante = Number(idRestaurante);
+        dadosItem.idRestaurante = String(idRestaurante);
       }
 
       let resItem;
@@ -167,13 +167,13 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
         const insumosFormatados = insumosPrato
           .filter((i) => i.idEstoque && i.quantidadeNecessaria)
           .map((i) => ({
-            idEstoque: parseInt(i.idEstoque),
+            idEstoque: String(i.idEstoque),
             quantidadeNecessaria: parseFloat(i.quantidadeNecessaria),
           }));
 
         if (insumosFormatados.length > 0) {
           const payloadFicha = {
-            idCardapio: parseInt(idCardapioSalvo),
+            idCardapio: String(idCardapioSalvo),
             insumos: insumosFormatados,
           };
 
