@@ -41,6 +41,9 @@ function TelaLogin(){
                 console.log('Login bem-sucedido:', dados);
 
                 localStorage.setItem('token', dados.access_token);
+                if (dados.refresh_token) {
+                    localStorage.setItem('refreshToken', dados.refresh_token);
+                }
                 localStorage.setItem('funcao', dados.funcao);
                 localStorage.setItem('user', JSON.stringify(dados));
 

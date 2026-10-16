@@ -155,7 +155,9 @@ export default function TelaGarcom() {
 
   function handleLogout() {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
+    localStorage.removeItem('funcao');
     navigate('/login');
   }
 
