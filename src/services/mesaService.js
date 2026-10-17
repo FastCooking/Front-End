@@ -89,5 +89,16 @@ export async function obterPedidoAtivoMesa(idMesa) {
     throw new Error(erro.detail || 'Nenhum pedido ativo encontrado para esta mesa.');
   }
 
-  return resposta.json();
+  const data = await resposta.json();
+  const pedidoData = data.pedido || {};
+  return {
+    ...data,
+    idPedido: data.idPedido || pedidoData.idPedido,
+    status: data.status || pedidoData.status,
+    idMesa: data.idMesa || pedidoData.idMesa,
+    sessao_id: data.sessao_id || pedidoData.sessao_id,
+    idRestaurante: data.idRestaurante || pedidoData.idRestaurante,
+    itens: data.itens || [],
+    pedido: pedidoData,
+  };
 }

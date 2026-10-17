@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   MdShoppingBag,
@@ -11,6 +11,9 @@ import {
   MdWarning,
   MdHelpOutline,
   MdTimeline,
+  MdAccessTime,
+  MdRefresh,
+  MdLaunch,
 } from "react-icons/md";
 
 import { listarItensCardapio } from "../services/cardapioService";
@@ -20,6 +23,7 @@ import {
   adicionarItensAoPedido,
   chamarGarcom,
   obterPedidoAtivoMesa,
+  listarMesas,
 } from "../services/pedidoService";
 import { obterRestaurantePublico } from "../services/restauranteService";
 import { PRODUTOS_MOCK } from "../data/produtosMock";
@@ -29,21 +33,29 @@ import FiltroCategorias from "../components/cardapio/FiltroCategorias";
 import GridProdutos from "../components/cardapio/GridProdutos";
 import ModalDetalhesProduto from "../components/cardapio/ModalDetalhesProduto";
 
+function isUuid(val) {
+  return (
+    typeof val === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
+  );
+}
+
 export default function TelaAutoatendimento() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const idMesaParam = searchParams.get("idMesa") || searchParams.get("mesa");
-  const idRestauranteParam = searchParams.get("idRestaurante") || searchParams.get("restaurante");
-  const sessaoIdParam = searchParams.get("sessao_id") || searchParams.get("sessao");
-  const numMesaParam = searchParams.get("numMesa") || searchParams.get("numero");
+  const idMesaQuery = searchParams.get("idMesa");
+  const mesaQuery = searchParams.get("mesa");
+  const numMesaQuery = searchParams.get("numMesa") || searchParams.get("numero");
+  const idRestauranteQuery = searchParams.get("idRestaurante") || searchParams.get("restaurante");
+  const sessaoIdQuery = searchParams.get("sessao_id") || searchParams.get("sessao");
 
   // Mesa & Session info
   const [mesaInfo, setMesaInfo] = useState({
-    numero: numMesaParam,
-    idMesa: idMesaParam,
-    idRestaurante: idRestauranteParam,
-    sessao_id: sessaoIdParam,
+    numero: numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : null),
+    idMesa: isUuid(idMesaQuery) ? idMesaQuery : isUuid(mesaQuery) ? mesaQuery : null,
+    idRestaurante: idRestauranteQuery,
+    sessao_id: sessaoIdQuery,
     idPedidoAtivo: null,
   });
 
@@ -57,6 +69,11 @@ export default function TelaAutoatendimento() {
   const [modalInstrucoes, setModalInstrucoes] = useState(false);
   const [pedidoAtivoInfo, setPedidoAtivoInfo] = useState(null);
 
+  // Timer de 10 minutos (600s) para o primeiro pedido e aviso de expiração
+  const [tempoRestante, setTempoRestante] = useState(600);
+  const [mesaExpiradaModal, setMesaExpiradaModal] = useState(false);
+  const [reabrindoMesa, setReabrindoMesa] = useState(false);
+
   // Cart / Order state
   const [carrinho, setCarrinho] = useState([]);
   const [exibirResumoPedido, setExibirResumoPedido] = useState(false);
@@ -65,6 +82,20 @@ export default function TelaAutoatendimento() {
   const [msgSucesso, setMsgSucesso] = useState(null);
   const [erro, setErro] = useState(null);
 
+  // Verifica se a mesa já possui algum pedido ativo com itens (não cancelados)
+  const temPedidoComItens = useMemo(() => {
+    if (!pedidoAtivoInfo || !pedidoAtivoInfo.idPedido) return false;
+    const itens = pedidoAtivoInfo.itens || [];
+    return itens.some((i) => i.status !== "Cancelado");
+  }, [pedidoAtivoInfo]);
+
+  // Formatar tempo mm:ss
+  const formatarTempo = (segundos) => {
+    const min = Math.floor(segundos / 60);
+    const sec = segundos % 60;
+    return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  };
+
   // 1. Initialize table & load products from API
   useEffect(() => {
     let ativo = true;
@@ -72,15 +103,28 @@ export default function TelaAutoatendimento() {
     async function inicializar() {
       try {
         setCarregando(true);
-        let idRest = idRestauranteParam;
-        let idSessao = sessaoIdParam;
+        let idRest = idRestauranteQuery;
+        let idSessao = sessaoIdQuery;
         let idPedAtivo = null;
-        let numMesa = numMesaParam;
+        let numMesa = numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : null);
+        let targetIdMesa = isUuid(idMesaQuery) ? idMesaQuery : isUuid(mesaQuery) ? mesaQuery : null;
         let nomeRest = null;
 
-        // Auto-open table if idMesaParam exists
-        if (idMesaParam) {
-          const mesaRes = await abrirMesa(idMesaParam).catch((err) => {
+        // Se temos número da mesa e idRestaurante mas não o UUID da mesa, busca nas mesas cadastradas
+        if (!targetIdMesa && numMesa && idRest) {
+          const listaMesas = await listarMesas(idRest).catch(() => []);
+          if (Array.isArray(listaMesas)) {
+            const mesaEncontrada = listaMesas.find((m) => String(m.numero) === String(numMesa));
+            if (mesaEncontrada) {
+              targetIdMesa = mesaEncontrada.idMesa;
+              numMesa = mesaEncontrada.numero;
+            }
+          }
+        }
+
+        // Auto-open table if targetIdMesa exists
+        if (targetIdMesa) {
+          const mesaRes = await abrirMesa(targetIdMesa).catch((err) => {
             console.warn("Não foi possível auto-abrir mesa:", err);
             return null;
           });
@@ -88,7 +132,7 @@ export default function TelaAutoatendimento() {
           if (mesaRes) {
             idRest = mesaRes.idRestaurante || idRest;
             idSessao = mesaRes.idSessao || idSessao;
-            idPedAtivo = mesaRes.idPedidoAtivo;
+            idPedAtivo = mesaRes.idPedidoAtivo || idPedAtivo;
             numMesa = mesaRes.numero || numMesa;
             if (mesaRes.nomeRestaurante) {
               nomeRest = mesaRes.nomeRestaurante;
@@ -96,10 +140,19 @@ export default function TelaAutoatendimento() {
           }
 
           // Busca pedido/comanda ativo na mesa para o tracking
-          const comandaAtiva = await obterPedidoAtivoMesa(idMesaParam).catch(() => null);
-          if (ativo && comandaAtiva && comandaAtiva.idPedido && comandaAtiva.status !== "Fechado" && comandaAtiva.status !== "Cancelado") {
-            setPedidoAtivoInfo(comandaAtiva);
-            if (!idPedAtivo) idPedAtivo = comandaAtiva.idPedido;
+          const comandaAtiva = await obterPedidoAtivoMesa(targetIdMesa).catch(() => null);
+          const idPed = comandaAtiva?.idPedido || comandaAtiva?.pedido?.idPedido;
+          const statusPed = comandaAtiva?.status || comandaAtiva?.pedido?.status;
+          const itensValidos = (comandaAtiva?.itens || []).filter((i) => i.status !== "Cancelado");
+
+          if (ativo && comandaAtiva && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado" && itensValidos.length > 0) {
+            setPedidoAtivoInfo({
+              ...comandaAtiva,
+              idPedido: idPed,
+              status: statusPed,
+              itens: comandaAtiva.itens || [],
+            });
+            if (!idPedAtivo) idPedAtivo = idPed;
           }
         }
 
@@ -115,7 +168,7 @@ export default function TelaAutoatendimento() {
           if (nomeRest) setNomeRestaurante(nomeRest);
           setMesaInfo({
             numero: numMesa,
-            idMesa: idMesaParam,
+            idMesa: targetIdMesa,
             idRestaurante: idRest,
             sessao_id: idSessao || `sessao-${Date.now()}`,
             idPedidoAtivo: idPedAtivo,
@@ -174,7 +227,95 @@ export default function TelaAutoatendimento() {
     return () => {
       ativo = false;
     };
-  }, [idMesaParam, idRestauranteParam, sessaoIdParam, numMesaParam]);
+  }, [idMesaQuery, mesaQuery, numMesaQuery, idRestauranteQuery, sessaoIdQuery]);
+
+  // Contagem regressiva de 10 minutos (600s) para inatividade antes do 1º pedido
+  useEffect(() => {
+    if (temPedidoComItens || mesaExpiradaModal || !mesaInfo.idMesa) {
+      return;
+    }
+
+    const timerId = setInterval(() => {
+      setTempoRestante((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerId);
+          setMesaExpiradaModal(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [temPedidoComItens, mesaExpiradaModal, mesaInfo.idMesa]);
+
+  // Polling periódico para manter sincronizado o pedido ativo/tracking da mesa
+  useEffect(() => {
+    if (!mesaInfo.idMesa) return;
+    let ativo = true;
+
+    async function sincronizarComanda() {
+      try {
+        const comanda = await obterPedidoAtivoMesa(mesaInfo.idMesa).catch(() => null);
+        if (!ativo) return;
+        const idPed = comanda?.idPedido || comanda?.pedido?.idPedido;
+        const statusPed = comanda?.status || comanda?.pedido?.status;
+        const itensValidos = (comanda?.itens || []).filter((i) => i.status !== "Cancelado");
+
+        if (comanda && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado" && itensValidos.length > 0) {
+          setPedidoAtivoInfo({
+            ...comanda,
+            idPedido: idPed,
+            status: statusPed,
+            itens: comanda.itens || [],
+          });
+          setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: idPed }));
+        }
+      } catch (err) {
+        console.warn("Erro ao sincronizar comanda da mesa:", err);
+      }
+    }
+
+    const intervalId = setInterval(sincronizarComanda, 8000);
+    return () => {
+      ativo = false;
+      clearInterval(intervalId);
+    };
+  }, [mesaInfo.idMesa]);
+
+  // Reabrir mesa caso tenha expirado por inatividade
+  async function handleReabrirMesa() {
+    if (!mesaInfo.idMesa) {
+      setMesaExpiradaModal(false);
+      return;
+    }
+    setReabrindoMesa(true);
+    try {
+      await abrirMesa(mesaInfo.idMesa);
+      setTempoRestante(600);
+      setMesaExpiradaModal(false);
+      setMsgSucesso("Mesa reaberta com sucesso! Você tem 10 minutos para realizar o seu primeiro pedido.");
+      setTimeout(() => setMsgSucesso(null), 6000);
+
+      // Atualiza dados da mesa
+      const comanda = await obterPedidoAtivoMesa(mesaInfo.idMesa).catch(() => null);
+      const idPed = comanda?.idPedido || comanda?.pedido?.idPedido;
+      const statusPed = comanda?.status || comanda?.pedido?.status;
+      const itensValidos = (comanda?.itens || []).filter((i) => i.status !== "Cancelado");
+      if (comanda && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado" && itensValidos.length > 0) {
+        setPedidoAtivoInfo({
+          ...comanda,
+          idPedido: idPed,
+          status: statusPed,
+          itens: comanda.itens || [],
+        });
+      }
+    } catch (err) {
+      setErro(err.message || "Não foi possível reabrir a mesa. Tente novamente ou chame o garçom.");
+    } finally {
+      setReabrindoMesa(false);
+    }
+  }
 
   // Compute available categories dynamically
   const categoriasDisponiveis = useMemo(() => {
@@ -344,8 +485,26 @@ export default function TelaAutoatendimento() {
               </div>
             </div>
 
-            {/* Actions: Instruções + Chamar Garçom + Meu Pedido */}
-            <div className="flex items-center gap-2">
+            {/* Actions: Timer + Instruções + Tracking + Chamar Garçom + Meu Pedido */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap justify-end">
+              {/* Timer de Inatividade para o 1º Pedido */}
+              {mesaInfo.idMesa && !temPedidoComItens && (
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 ${
+                    tempoRestante <= 120
+                      ? "bg-red-600 text-white animate-pulse"
+                      : tempoRestante <= 300
+                      ? "bg-amber-500 text-white"
+                      : "bg-amber-100 text-amber-900 border border-amber-300"
+                  }`}
+                  title="Tempo limite de 10 minutos para o 1º pedido nesta mesa"
+                >
+                  <MdAccessTime size={16} />
+                  <span>1º Pedido: {formatarTempo(tempoRestante)}</span>
+                </div>
+              )}
+
+              {/* Botão de Instruções */}
               <button
                 onClick={() => setModalInstrucoes(true)}
                 className="p-2 sm:p-2.5 rounded-2xl bg-white border border-gray-200 text-gray-600 hover:text-[#9C1C0E] hover:border-[#9C1C0E] shadow-xs transition-all cursor-pointer shrink-0"
@@ -354,22 +513,41 @@ export default function TelaAutoatendimento() {
                 <MdHelpOutline size={20} />
               </button>
 
+              {/* Botão de Acompanhar Tracking no Header quando houver pedido ativo */}
+              {pedidoAtivoInfo && pedidoAtivoInfo.idPedido && (
+                <button
+                  onClick={() => {
+                    const p = new URLSearchParams();
+                    if (mesaInfo.idMesa) p.set("idMesa", mesaInfo.idMesa);
+                    if (mesaInfo.idRestaurante) p.set("idRestaurante", mesaInfo.idRestaurante);
+                    if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
+                    navigate(`/tracking/${pedidoAtivoInfo.idPedido}?${p.toString()}`);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer shrink-0"
+                  title="Acompanhar status do pedido na tela de tracking"
+                >
+                  <MdTimeline size={18} />
+                  <span className="hidden sm:inline">Tracking</span>
+                </button>
+              )}
+
               {mesaInfo.idMesa && (
                 <button
                   onClick={handleChamarGarcom}
                   disabled={chamandoGarcom}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
                   title="Chamar garçom para a sua mesa"
                 >
                   <MdNotificationsActive size={18} className={chamandoGarcom ? "animate-spin" : ""} />
-                  <span>{chamandoGarcom ? "Chamando..." : "Chamar Garçom"}</span>
+                  <span className="hidden sm:inline">{chamandoGarcom ? "Chamando..." : "Chamar Garçom"}</span>
+                  <span className="sm:hidden">{chamandoGarcom ? "..." : "Garçom"}</span>
                 </button>
               )}
 
               {/* Cart Icon Badge */}
               <button
                 onClick={() => setExibirResumoPedido(true)}
-                className="relative flex items-center gap-2 px-3.5 sm:px-4 py-2 bg-[#9C1C0E]/10 text-[#9C1C0E] hover:bg-[#9C1C0E]/20 rounded-2xl transition-all cursor-pointer font-semibold text-xs sm:text-sm shrink-0"
+                className="relative flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#9C1C0E]/10 text-[#9C1C0E] hover:bg-[#9C1C0E]/20 rounded-2xl transition-all cursor-pointer font-semibold text-xs sm:text-sm shrink-0"
               >
                 <MdShoppingBag size={20} />
                 <span className="hidden sm:inline">Meu Pedido</span>
@@ -382,19 +560,20 @@ export default function TelaAutoatendimento() {
             </div>
           </div>
 
-          {/* Active Order Tracking Banner */}
+          {/* Active Order Tracking Banner (Responsivo para celular e desktop) */}
           {pedidoAtivoInfo && (
-            <div className="bg-gradient-to-r from-amber-500/15 via-[#B78A10]/15 to-amber-500/10 border border-amber-300/80 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-fade-in">
+            <div className="bg-gradient-to-r from-amber-500/15 via-[#B78A10]/15 to-amber-500/10 border border-amber-300/80 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs animate-fade-in">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0">
-                  <MdTimeline size={20} />
+                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                  <MdTimeline size={22} />
                 </div>
                 <div>
                   <p className="text-xs sm:text-sm font-bold text-gray-900">
                     Você possui um pedido em andamento!
                   </p>
                   <p className="text-[11px] text-gray-600">
-                    {pedidoAtivoInfo.itens?.filter((i) => i.status !== "Cancelado").length || 0} itens na comanda • Status: <strong className="text-[#9C1C0E]">{pedidoAtivoInfo.status}</strong>
+                    {(pedidoAtivoInfo.itens || []).filter((i) => i.status !== "Cancelado").length} itens na comanda • Status:{" "}
+                    <strong className="text-[#9C1C0E]">{pedidoAtivoInfo.status}</strong>
                   </p>
                 </div>
               </div>
@@ -407,9 +586,9 @@ export default function TelaAutoatendimento() {
                   if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
                   navigate(`/tracking/${pedidoAtivoInfo.idPedido}?${p.toString()}`);
                 }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer w-full sm:w-auto"
               >
-                <span>Acompanhar Preparo</span>
+                <span>Acompanhar Preparo no Tracking</span>
                 <span>➔</span>
               </button>
             </div>
@@ -678,12 +857,24 @@ export default function TelaAutoatendimento() {
               </div>
 
               {/* Alerta de Fechamento de Mesa e Ajuda */}
+              {/* Regra dos 10 Minutos para o Primeiro Pedido */}
+              <div className="flex items-start gap-3 bg-red-50 p-3.5 rounded-2xl border border-red-200 text-red-950 shadow-xs">
+                <span className="text-2xl">⏳</span>
+                <div>
+                  <strong className="text-red-950 block font-bold mb-0.5">5. Limite de 10 min para o 1º pedido</strong>
+                  <span className="text-xs text-red-900 leading-relaxed block">
+                    Após abrir a mesa, você tem <strong>até 10 minutos</strong> para realizar o seu primeiro pedido. Se nenhum pedido for feito nesse período, a mesa será <strong>automaticamente considerada fechada</strong> para liberar o atendimento. Após o primeiro pedido, esse limite não se aplica mais!
+                  </span>
+                </div>
+              </div>
+
+              {/* Alerta de Fechamento de Mesa e Ajuda */}
               <div className="flex items-start gap-3 bg-amber-50 p-3.5 rounded-2xl border border-amber-300 text-amber-950 shadow-xs">
                 <span className="text-2xl">🛎️</span>
                 <div>
-                  <strong className="text-amber-950 block font-bold mb-0.5">Fechamento de Mesa e Ajuda</strong>
+                  <strong className="text-amber-950 block font-bold mb-0.5">6. Fechamento de Mesa ou Ajuda</strong>
                   <span className="text-xs text-amber-900 leading-relaxed block">
-                    Para <strong>solicitar o fechamento da conta/mesa</strong>, tirar dúvidas ou pedir ajuda com seus pedidos, basta tocar no botão <strong>"Chamar Garçom"</strong> no topo da tela a qualquer momento!
+                    Para <strong>solicitar o fechamento da conta/mesa</strong> ou pedir ajuda com seus pedidos, basta tocar no botão <strong>"Chamar Garçom"</strong> no topo da tela ou chamar um garçom da equipe a qualquer momento!
                   </span>
                 </div>
               </div>
@@ -697,6 +888,35 @@ export default function TelaAutoatendimento() {
                 Entendi, vamos aos pedidos!
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Modal de Mesa Encerrada por Inatividade ─── */}
+      {mesaExpiradaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 text-center space-y-4 animate-fade-in border border-gray-100">
+            <div className="w-16 h-16 rounded-full bg-red-100 text-[#9C1C0E] flex items-center justify-center mx-auto shadow-inner">
+              <MdAccessTime size={36} />
+            </div>
+            <h3 className="text-lg font-black text-gray-900 leading-tight">
+              Mesa Encerrada por Inatividade
+            </h3>
+            <p className="text-xs text-gray-600 leading-relaxed">
+              O tempo limite de <strong>10 minutos</strong> para realizar o primeiro pedido nesta mesa foi atingido e a sessão foi fechada automaticamente para liberar o atendimento.
+            </p>
+            <p className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-200 font-medium">
+              Caso ainda esteja no local, toque no botão abaixo para <strong>reabrir a mesa</strong> e continuar escolhendo seus itens no cardápio.
+            </p>
+
+            <button
+              onClick={handleReabrirMesa}
+              disabled={reabrindoMesa}
+              className="w-full py-3.5 px-4 bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold text-sm rounded-2xl shadow-lg shadow-[#9C1C0E]/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <MdRefresh size={20} className={reabrindoMesa ? "animate-spin" : ""} />
+              <span>{reabrindoMesa ? "Reabrindo Mesa..." : "Reabrir Mesa e Fazer Pedido"}</span>
+            </button>
           </div>
         </div>
       )}

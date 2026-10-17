@@ -57,6 +57,7 @@ import {
   listarMesas,
   atualizarMesa,
   excluirMesa,
+  obterPedidoAtivoMesa,
 } from "../services/mesaService";
 import { obterFilaKds, listarPedidos } from "../services/pedidoService";
 
@@ -1383,10 +1384,20 @@ function TelaGerente() {
                                 <span>Ver Comanda</span>
                               </button>
                               <button
-                                onClick={() => {
+                                onClick={async () => {
                                   if (m.idPedidoAtivo) {
                                     window.open(`/tracking/${m.idPedidoAtivo}`, "_blank");
-                                  } else {
+                                    return;
+                                  }
+                                  try {
+                                    const comanda = await obterPedidoAtivoMesa(m.idMesa);
+                                    const idPed = comanda?.idPedido || comanda?.pedido?.idPedido;
+                                    if (idPed) {
+                                      window.open(`/tracking/${idPed}`, "_blank");
+                                    } else {
+                                      setMesaComanda(m);
+                                    }
+                                  } catch (err) {
                                     setMesaComanda(m);
                                   }
                                 }}

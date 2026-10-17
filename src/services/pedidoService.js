@@ -225,7 +225,18 @@ export async function obterPedidoAtivoMesa(idMesa) {
     throw new Error(errorData.detail || 'Erro ao obter comanda ativa da mesa.');
   }
 
-  return response.json();
+  const data = await response.json();
+  const pedidoData = data.pedido || {};
+  return {
+    ...data,
+    idPedido: data.idPedido || pedidoData.idPedido,
+    status: data.status || pedidoData.status,
+    idMesa: data.idMesa || pedidoData.idMesa,
+    sessao_id: data.sessao_id || pedidoData.sessao_id,
+    idRestaurante: data.idRestaurante || pedidoData.idRestaurante,
+    itens: data.itens || [],
+    pedido: pedidoData,
+  };
 }
 
 export async function registrarPagamento(idPedido, formaPagamento = 'Cartão de Crédito', valor = null) {
