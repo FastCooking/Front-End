@@ -37,7 +37,7 @@ function TelaLogin(){
             if(bloqueado) return;
 
             try{
-                const dados = await login(email, senha);
+                const dados = await login(email.trim().toLowerCase(), senha.trim());
                 console.log('Login bem-sucedido:', dados);
 
                 localStorage.setItem('token', dados.access_token);
@@ -50,16 +50,16 @@ function TelaLogin(){
                 setErro('');
                 setTentativas(0);
 
-                navigate(RotaPerfil[dados.funcao]);
+                navigate(RotaPerfil[dados.funcao] || '/');
 
             } catch (error) {
                 console.error('Erro ao fazer login:', error.message);
 
                 const novasTentativas = tentativas + 1;
                 setTentativas(novasTentativas);
-                setErro('Credenciais inválidas. Tentativa ' + novasTentativas + ' de 3.');
+                setErro(error.message || `Credenciais inválidas. Tentativa ${novasTentativas} de 5.`);
 
-                if(novasTentativas >= 3){
+                if(novasTentativas >= 5){
                     setBloqueado(true);
                     setErro('Conta bloqueada devido a múltiplas tentativas falhas. Tente novamente mais tarde.');
                 }
@@ -87,8 +87,11 @@ function TelaLogin(){
                             id="email" 
                             type="email" 
                             placeholder="E-mail" 
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
                             value={email} onChange={(e)=> setEmail(e.target.value)} 
-                            className="border solid border-slate-300 rounded-md p-2 pl-5 w-64" required
+                            className="border solid border-slate-300 rounded-md p-2 pl-5 w-64 text-sm" required
                         />
                     </div><br /> 
                     
@@ -103,8 +106,10 @@ function TelaLogin(){
                             id="senha" 
                             type={mostrarSenha ? "text" : "password"} 
                             placeholder="Senha" 
+                            autoCapitalize="none"
+                            autoCorrect="off"
                             value={senha} onChange={(e)=> setSenha(e.target.value)} 
-                            className="border solid border-slate-300 rounded-md p-2 pl-5 pr-8 w-64" required
+                            className="border solid border-slate-300 rounded-md p-2 pl-5 pr-8 w-64 text-sm" required
                         />
                         <button
                             type="button"
