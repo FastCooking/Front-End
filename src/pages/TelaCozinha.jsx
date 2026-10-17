@@ -21,6 +21,26 @@ export default function TelaCozinha() {
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
 
+  // Verificação de permissão e autenticação para Cozinha
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const funcao = localStorage.getItem('funcao');
+
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    const funcaoNorm = (funcao || '').toLowerCase();
+    if (funcaoNorm !== 'cozinheiro' && funcaoNorm !== 'cozinha') {
+      alert('Acesso restrito ao módulo da Cozinha (KDS).');
+      if (funcaoNorm === 'garcom') navigate('/garcom');
+      else if (funcaoNorm === 'gerente') navigate('/gerente');
+      else if (funcaoNorm === 'adm') navigate('/administrativo');
+      else navigate('/login');
+    }
+  }, [navigate]);
+
   const carregarFilaHttp = useCallback(async () => {
     try {
       const data = await obterFilaKds();

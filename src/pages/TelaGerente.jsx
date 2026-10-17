@@ -135,9 +135,15 @@ function TelaGerente() {
     }
 
     const funcaoNormalizada = (funcao || "").toLowerCase();
-    if (funcaoNormalizada !== "gerente" && funcaoNormalizada !== "adm") {
-      alert("Acesso restrito a Gerentes e Administradores.");
-      navigate("/login");
+    if (funcaoNormalizada === "adm") {
+      navigate("/administrativo");
+      return;
+    }
+    if (funcaoNormalizada !== "gerente") {
+      alert("Acesso restrito ao perfil de Gerente.");
+      if (funcaoNormalizada === "garcom") navigate("/garcom");
+      else if (funcaoNormalizada === "cozinheiro" || funcaoNormalizada === "cozinha") navigate("/cozinha");
+      else navigate("/login");
       return;
     }
 

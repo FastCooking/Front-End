@@ -207,3 +207,23 @@ export async function obterPedidoAtivoMesa(idMesa) {
 
   return response.json();
 }
+
+export async function registrarPagamento(idPedido, formaPagamento = 'Cartão de Crédito', valor = null) {
+  const payload = { formaPagamento };
+  if (valor !== null && valor !== undefined) {
+    payload.valor = Number(valor);
+  }
+  const response = await fetch(`${BASE_URL}/pedidos/${idPedido}/pagamento`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao registrar pagamento.');
+  }
+
+  return response.json();
+}
+

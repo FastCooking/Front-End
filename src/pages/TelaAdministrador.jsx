@@ -75,7 +75,11 @@ function TelaAdministrador() {
     // Apenas quem é Adm (ou adm) pode acessar esta tela
     if (funcao !== "Adm" && funcao !== "adm") {
       alert("Acesso restrito a Administradores do Sistema.");
-      navigate("/login");
+      const funcaoNorm = (funcao || "").toLowerCase();
+      if (funcaoNorm === "gerente") navigate("/gerente");
+      else if (funcaoNorm === "garcom") navigate("/garcom");
+      else if (funcaoNorm === "cozinheiro" || funcaoNorm === "cozinha") navigate("/cozinha");
+      else navigate("/login");
     }
   }, [navigate]);
 

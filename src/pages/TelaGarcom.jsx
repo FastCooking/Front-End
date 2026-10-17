@@ -9,6 +9,7 @@ import {
   atenderChamadoMesa,
   obterChamadosAtivos,
   obterPedidoAtivoMesa,
+  registrarPagamento,
 } from '../services/pedidoService';
 import logo from '../assets/fast cooking logo.png';
 
@@ -32,8 +33,31 @@ export default function TelaGarcom() {
   const [carregandoComanda, setCarregandoComanda] = useState(false);
   const [usuario, setUsuario] = useState(null);
 
+  const [formaPagamento, setFormaPagamento] = useState('Cartão de Crédito');
+  const [processandoPagamento, setProcessandoPagamento] = useState(false);
+
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
+
+  // Verificação de permissão e autenticação para Garçom
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const funcao = localStorage.getItem('funcao');
+
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    const funcaoNorm = (funcao || '').toLowerCase();
+    if (funcaoNorm !== 'garcom') {
+      alert('Acesso restrito ao módulo de Atendimento (Garçom).');
+      if (funcaoNorm === 'cozinheiro' || funcaoNorm === 'cozinha') navigate('/cozinha');
+      else if (funcaoNorm === 'gerente') navigate('/gerente');
+      else if (funcaoNorm === 'adm') navigate('/administrativo');
+      else navigate('/login');
+    }
+  }, [navigate]);
 
   // Carrega usuário
   useEffect(() => {
@@ -252,6 +276,31 @@ export default function TelaGarcom() {
       alert(`Não foi possível cancelar o item: ${err.message}`);
     } finally {
       setProcessando(false);
+    }
+  }
+
+  async function handleRegistrarPagamento() {
+    if (!comandaModal?.pedido?.idPedido) return;
+
+    const totalCalculado = comandaModal.itens
+      .filter((it) => it.status !== 'Cancelado')
+      .reduce((acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1), 0);
+
+    const confirmou = window.confirm(
+      `Confirmar encerramento e recebimento de R$ ${totalCalculado.toFixed(2)} da Mesa #${comandaModal.mesa.numero} via ${formaPagamento}?`
+    );
+    if (!confirmou) return;
+
+    setProcessandoPagamento(true);
+    try {
+      await registrarPagamento(comandaModal.pedido.idPedido, formaPagamento, totalCalculado);
+      alert(`Pagamento de R$ ${totalCalculado.toFixed(2)} registrado com sucesso! A Mesa #${comandaModal.mesa.numero} foi liberada.`);
+      setComandaModal(null);
+      await carregarMesas();
+    } catch (err) {
+      alert(`Não foi possível registrar o pagamento: ${err.message}`);
+    } finally {
+      setProcessandoPagamento(false);
     }
   }
 
@@ -603,10 +652,10 @@ export default function TelaGarcom() {
             </div>
 
             {/* Rodapé do Modal */}
-            <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
+            <div className="pt-4 border-t border-stone-200 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <span className="text-xs text-stone-500">Total da Comanda:</span>
-                <p className="text-base font-extrabold text-stone-900">
+                <p className="text-base font-extrabold text-[#b84226]">
                   R${' '}
                   {comandaModal.itens
                     .filter((it) => it.status !== 'Cancelado')
@@ -615,12 +664,44 @@ export default function TelaGarcom() {
                 </p>
               </div>
 
-              <button
-                onClick={() => setComandaModal(null)}
-                className="bg-stone-900 hover:bg-black text-white text-xs font-bold px-5 py-2.5 rounded-xl"
-              >
-                Fechar
-              </button>
+              <div className="flex items-center gap-2">
+                {comandaModal.pedido?.status !== 'Fechado' && (
+                  <>
+                    <select
+                      value={formaPagamento}
+                      onChange={(e) => setFormaPagamento(e.target.value)}
+                      disabled={processandoPagamento}
+                      className="text-xs font-semibold bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-2 text-stone-800 focus:outline-none"
+                    >
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="Cartão de Débito">Cartão de Débito</option>
+                      <option value="PIX">PIX</option>
+                      <option value="Dinheiro">Dinheiro</option>
+                    </select>
+
+                    <button
+                      onClick={handleRegistrarPagamento}
+                      disabled={
+                        processandoPagamento ||
+                        comandaModal.itens
+                          .filter((it) => it.status !== 'Cancelado')
+                          .reduce((acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1), 0) <= 0
+                      }
+                      className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                    >
+                      <span>💳</span>
+                      <span>{processandoPagamento ? 'Processando...' : 'Receber Pagamento'}</span>
+                    </button>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setComandaModal(null)}
+                  className="bg-stone-200 hover:bg-stone-300 text-stone-800 text-xs font-bold px-4 py-2 rounded-xl"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>
