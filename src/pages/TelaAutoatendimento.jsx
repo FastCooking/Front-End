@@ -1,65 +1,79 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { listarItensCardapio } from '../services/cardapioService';
-import { abrirMesa, criarPedido, adicionarItensAoPedido, chamarGarcom } from '../services/pedidoService';
-import logo from '../assets/fast cooking logo.png';
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import {
+  MdShoppingBag,
+  MdArrowBack,
+  MdDelete,
+  MdClose,
+  MdCheckCircle,
+  MdNotificationsActive,
+  MdTableBar,
+  MdWarning,
+} from "react-icons/md";
+
+import { listarItensCardapio } from "../services/cardapioService";
+import {
+  abrirMesa,
+  criarPedido,
+  adicionarItensAoPedido,
+  chamarGarcom,
+} from "../services/pedidoService";
+import { PRODUTOS_MOCK } from "../data/produtosMock";
+
+import CampoPesquisa from "../components/cardapio/CampoPesquisa";
+import FiltroCategorias from "../components/cardapio/FiltroCategorias";
+import GridProdutos from "../components/cardapio/GridProdutos";
+import ModalDetalhesProduto from "../components/cardapio/ModalDetalhesProduto";
 
 export default function TelaAutoatendimento() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const idMesaParam = searchParams.get('idMesa') || searchParams.get('mesa');
-  const idRestauranteParam = searchParams.get('idRestaurante') || searchParams.get('restaurante');
-  const sessaoIdParam = searchParams.get('sessao_id') || searchParams.get('sessao');
+  const idMesaParam = searchParams.get("idMesa") || searchParams.get("mesa");
+  const idRestauranteParam = searchParams.get("idRestaurante") || searchParams.get("restaurante");
+  const sessaoIdParam = searchParams.get("sessao_id") || searchParams.get("sessao");
+  const numMesaParam = searchParams.get("numMesa") || searchParams.get("numero");
 
+  // Mesa & Session info
   const [mesaInfo, setMesaInfo] = useState({
-    numero: null,
+    numero: numMesaParam,
     idMesa: idMesaParam,
     idRestaurante: idRestauranteParam,
     sessao_id: sessaoIdParam,
     idPedidoAtivo: null,
   });
 
-  const [itensCardapio, setItensCardapio] = useState([]);
-  const [categoriaAtiva, setCategoriaAtiva] = useState('Todos');
-  const [carrinho, setCarrinho] = useState([]);
-  const [isCarrinhoAberto, setIsCarrinhoAberto] = useState(false);
+  // State
+  const [produtos, setProdutos] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const [categoriaSelecionada, setCategoriaSelecionada] = useState("Todos");
+  const [termoBusca, setTermoBusca] = useState("");
+  const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+
+  // Cart / Order state
+  const [carrinho, setCarrinho] = useState([]);
+  const [exibirResumoPedido, setExibirResumoPedido] = useState(false);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [chamandoGarcom, setChamandoGarcom] = useState(false);
   const [msgSucesso, setMsgSucesso] = useState(null);
   const [erro, setErro] = useState(null);
 
-  async function handleChamarGarcom() {
-    if (!mesaInfo.idMesa) {
-      alert('Identificação da mesa não encontrada para chamar o garçom.');
-      return;
-    }
-    setChamandoGarcom(true);
-    try {
-      await chamarGarcom(mesaInfo.idMesa);
-      setMsgSucesso('🛎️ Garçom chamado! Nossa equipe já foi notificada e está vindo até a sua mesa.');
-      setTimeout(() => setMsgSucesso(null), 6000);
-    } catch (err) {
-      setErro(err.message || 'Erro ao chamar garçom.');
-    } finally {
-      setChamandoGarcom(false);
-    }
-  }
-
-  // Inicializa mesa e sessão
+  // 1. Initialize table & load products from API
   useEffect(() => {
+    let ativo = true;
+
     async function inicializar() {
       try {
         setCarregando(true);
         let idRest = idRestauranteParam;
         let idSessao = sessaoIdParam;
         let idPedAtivo = null;
-        let numMesa = null;
+        let numMesa = numMesaParam;
 
+        // Auto-open table if idMesaParam exists
         if (idMesaParam) {
           const mesaRes = await abrirMesa(idMesaParam).catch((err) => {
-            console.warn('Não foi possível auto-abrir mesa:', err);
+            console.warn("Não foi possível auto-abrir mesa:", err);
             return null;
           });
 
@@ -67,81 +81,144 @@ export default function TelaAutoatendimento() {
             idRest = mesaRes.idRestaurante || idRest;
             idSessao = mesaRes.idSessao || idSessao;
             idPedAtivo = mesaRes.idPedidoAtivo;
-            numMesa = mesaRes.numero;
+            numMesa = mesaRes.numero || numMesa;
           }
         }
 
-        setMesaInfo({
-          numero: numMesa,
-          idMesa: idMesaParam,
-          idRestaurante: idRest,
-          sessao_id: idSessao || `sessao-${Date.now()}`,
-          idPedidoAtivo: idPedAtivo,
-        });
+        if (ativo) {
+          setMesaInfo({
+            numero: numMesa,
+            idMesa: idMesaParam,
+            idRestaurante: idRest,
+            sessao_id: idSessao || `sessao-${Date.now()}`,
+            idPedidoAtivo: idPedAtivo,
+          });
+        }
 
+        // Fetch products for restaurant if idRestaurante is present
         if (idRest) {
-          const cardapioData = await listarItensCardapio(idRest);
-          setItensCardapio(cardapioData.filter((i) => i.disponivel));
+          try {
+            const cardapioData = await listarItensCardapio(idRest);
+            if (ativo && Array.isArray(cardapioData) && cardapioData.length > 0) {
+              const itensTratados = cardapioData
+                .filter((item) => item.disponivel !== false)
+                .map((item) => ({
+                  id: item.id || item.idCardapio,
+                  idCardapio: item.idCardapio || item.id,
+                  nome: item.nome,
+                  preco: Number(item.preco) || 0,
+                  categoria: item.categoria || "Geral",
+                  descricao: item.descricao || "",
+                  imagem: item.pathImage || item.imagemUrl || item.imagem_url || item.imagem || "",
+                  disponivel: true,
+                  ingredientes: Array.isArray(item.ingredientes)
+                    ? item.ingredientes
+                    : item.descricao
+                    ? item.descricao
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter((s) => s.length > 2 && s.length < 35)
+                    : [],
+                }));
+              setProdutos(itensTratados);
+              return;
+            }
+          } catch (errApi) {
+            console.warn("Erro ao buscar cardápio da API, usando catálogo base:", errApi);
+          }
+        }
+
+        // Fallback to PRODUTOS_MOCK if no restaurant specified or empty
+        if (ativo) {
+          setProdutos(PRODUTOS_MOCK);
         }
       } catch (err) {
-        setErro(err.message || 'Erro ao carregar cardápio.');
+        if (ativo) {
+          setErro(err.message || "Erro ao carregar cardápio.");
+          setProdutos(PRODUTOS_MOCK);
+        }
       } finally {
-        setCarregando(false);
+        if (ativo) setCarregando(false);
       }
     }
 
     inicializar();
-  }, [idMesaParam, idRestauranteParam, sessaoIdParam]);
 
-  const categorias = ['Todos', ...new Set(itensCardapio.map((i) => i.categoria).filter(Boolean))];
+    return () => {
+      ativo = false;
+    };
+  }, [idMesaParam, idRestauranteParam, sessaoIdParam, numMesaParam]);
 
-  const itensFiltrados = categoriaAtiva === 'Todos'
-    ? itensCardapio
-    : itensCardapio.filter((i) => i.categoria === categoriaAtiva);
+  // Compute available categories dynamically
+  const categoriasDisponiveis = useMemo(() => {
+    const cats = new Set(produtos.map((p) => p.categoria).filter(Boolean));
+    return ["Todos", ...Array.from(cats)];
+  }, [produtos]);
 
-  function adicionarAoCarrinho(item) {
-    setCarrinho((prev) => {
-      const existente = prev.find((i) => i.idCardapio === item.idCardapio);
-      if (existente) {
-        return prev.map((i) =>
-          i.idCardapio === item.idCardapio
-            ? { ...i, quantidade: i.quantidade + 1 }
-            : i
-        );
-      }
-      return [...prev, { ...item, quantidade: 1, observacao: '' }];
+  // Real-time filtering logic
+  const produtosFiltrados = useMemo(() => {
+    return produtos.filter((produto) => {
+      const atendeCategoria =
+        categoriaSelecionada === "Todos" || produto.categoria === categoriaSelecionada;
+
+      const atendeBusca = produto.nome
+        .toLowerCase()
+        .includes(termoBusca.toLowerCase().trim());
+
+      return atendeCategoria && atendeBusca;
     });
-  }
+  }, [produtos, categoriaSelecionada, termoBusca]);
 
-  function alterarQuantidade(idCardapio, delta) {
-    setCarrinho((prev) =>
-      prev
-        .map((i) => {
-          if (i.idCardapio === idCardapio) {
-            const novaQtd = i.quantidade + delta;
-            return novaQtd > 0 ? { ...i, quantidade: novaQtd } : null;
-          }
-          return i;
-        })
-        .filter(Boolean)
-    );
-  }
-
-  function atualizarObservacao(idCardapio, observacao) {
-    setCarrinho((prev) =>
-      prev.map((i) =>
-        i.idCardapio === idCardapio ? { ...i, observacao } : i
-      )
-    );
-  }
-
-  const totalCarrinho = carrinho.reduce((acc, i) => acc + (Number(i.preco) || 0) * i.quantidade, 0);
-  const totalItens = carrinho.reduce((acc, i) => acc + i.quantidade, 0);
-
-  async function finalizarPedido() {
-    if (carrinho.length === 0) return;
+  // Chamar Garçom
+  async function handleChamarGarcom() {
     if (!mesaInfo.idMesa) {
-      alert('Mesa não informada. Por favor, escaneie novamente o QR Code da sua mesa.');
+      alert("Para chamar o garçom, escaneie o QR Code localizado na sua mesa.");
+      return;
+    }
+
+    setChamandoGarcom(true);
+    try {
+      await chamarGarcom(mesaInfo.idMesa);
+      setMsgSucesso("🛎️ Garçom chamado! A equipe foi notificada e já está a caminho.");
+      setTimeout(() => setMsgSucesso(null), 5000);
+    } catch (err) {
+      setErro(err.message || "Erro ao chamar garçom.");
+      setTimeout(() => setErro(null), 5000);
+    } finally {
+      setChamandoGarcom(false);
+    }
+  }
+
+  // Handle adding item to order
+  const handleAdicionarAoPedido = (itemPedido) => {
+    setCarrinho((prev) => [...prev, itemPedido]);
+  };
+
+  // Remove item from order
+  const handleRemoverDoCarrinho = (indexParaRemover) => {
+    setCarrinho((prev) => prev.filter((_, index) => index !== indexParaRemover));
+  };
+
+  // Total item count in order
+  const totalItensPedido = carrinho.reduce(
+    (total, item) => total + item.quantidade,
+    0
+  );
+
+  // Total price of order
+  const valorTotalPedido = carrinho.reduce(
+    (total, item) => total + (item.produto.preco || 0) * item.quantidade,
+    0
+  );
+
+  // Submit Order to Backend API
+  async function handleFinalizarPedido() {
+    if (carrinho.length === 0) return;
+
+    if (!mesaInfo.idMesa) {
+      alert(
+        "Mesa não identificada. Por favor, aponte a câmera para o QR Code da sua mesa para enviar o pedido diretamente para a cozinha."
+      );
       return;
     }
 
@@ -149,16 +226,26 @@ export default function TelaAutoatendimento() {
     setErro(null);
 
     try {
-      const itensFormatados = carrinho.map((i) => ({
-        idCardapio: i.idCardapio,
-        quantidade: i.quantidade,
-        observacao: i.observacao ? i.observacao.trim() : null,
-      }));
+      const itensFormatados = carrinho.map((i) => {
+        const obsPartes = [];
+        if (i.ingredientesRemovidos && i.ingredientesRemovidos.length > 0) {
+          obsPartes.push(`Sem: ${i.ingredientesRemovidos.join(", ")}`);
+        }
+        if (i.observacao) {
+          obsPartes.push(i.observacao);
+        }
+
+        return {
+          idCardapio: i.produto.idCardapio || i.produto.id,
+          quantidade: i.quantidade,
+          observacao: obsPartes.length > 0 ? obsPartes.join(" | ") : null,
+        };
+      });
 
       let pedidoId = mesaInfo.idPedidoAtivo;
 
       if (pedidoId) {
-        // Já tem comanda/pedido ativo na mesa -> anexa itens à comanda compartilhada
+        // Já tem comanda/pedido ativo na mesa -> anexa itens à comanda
         await adicionarItensAoPedido(pedidoId, itensFormatados);
       } else {
         // Cria novo pedido para a mesa
@@ -171,284 +258,289 @@ export default function TelaAutoatendimento() {
       }
 
       setCarrinho([]);
-      setIsCarrinhoAberto(false);
+      setExibirResumoPedido(false);
       navigate(`/tracking/${pedidoId}`);
     } catch (err) {
-      setErro(err.message || 'Erro ao enviar pedido.');
+      setErro(err.message || "Erro ao finalizar pedido. Tente novamente.");
     } finally {
       setEnviandoPedido(false);
     }
   }
 
-  const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
-
-  function getImagemUrl(path) {
-    if (!path) return null;
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
-      return path;
-    }
-    return `${BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
-  }
-
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 pb-28">
-      {/* Top Header */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md shadow-sm border-b border-stone-200 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="FastCooking Logo" className="h-10 w-auto object-contain" />
-            <div>
-              <h1 className="text-lg font-bold text-[#b84226]">FastCooking Cardápio</h1>
-              <p className="text-xs text-stone-500">
-                {mesaInfo.numero ? `Mesa ${mesaInfo.numero}` : 'Autoatendimento Digital'}
-              </p>
+    <div className="min-h-screen bg-[#FAF6F3] font-[Poppins] text-gray-800 pb-28">
+      {/* ─── Sticky Top Header Container ────────────────────────────── */}
+      <header className="sticky top-0 z-40 bg-[#FAF6F3]/95 backdrop-blur-md border-b border-gray-200/80 shadow-xs pt-3 pb-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-3">
+          {/* Feedback Messages */}
+          {msgSucesso && (
+            <div className="bg-emerald-600 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center justify-between shadow-md animate-fade-in">
+              <span>{msgSucesso}</span>
+              <button onClick={() => setMsgSucesso(null)} className="cursor-pointer">
+                <MdClose size={18} />
+              </button>
+            </div>
+          )}
+
+          {erro && (
+            <div className="bg-red-600 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center justify-between shadow-md animate-fade-in">
+              <span className="flex items-center gap-1.5">
+                <MdWarning size={18} /> {erro}
+              </span>
+              <button onClick={() => setErro(null)} className="cursor-pointer">
+                <MdClose size={18} />
+              </button>
+            </div>
+          )}
+
+          {/* Top Bar with Restaurant / Table Info & Actions */}
+          <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <button
+                onClick={() => navigate("/")}
+                className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-white/80 transition-all cursor-pointer"
+                title="Voltar ao início"
+              >
+                <MdArrowBack size={22} />
+              </button>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black text-[#9C1C0E] tracking-tight leading-tight">
+                  FastCooking
+                </h1>
+                {mesaInfo.numero ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#B78A10] bg-[#B78A10]/15 px-2.5 py-0.5 rounded-md">
+                    <MdTableBar size={14} /> Mesa {mesaInfo.numero}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-gray-400">Autoatendimento</span>
+                )}
+              </div>
+            </div>
+
+            {/* Actions: Chamar Garçom + Meu Pedido */}
+            <div className="flex items-center gap-2">
+              {mesaInfo.idMesa && (
+                <button
+                  onClick={handleChamarGarcom}
+                  disabled={chamandoGarcom}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  title="Chamar garçom para a sua mesa"
+                >
+                  <MdNotificationsActive size={18} className={chamandoGarcom ? "animate-spin" : ""} />
+                  <span>{chamandoGarcom ? "Chamando..." : "Chamar Garçom"}</span>
+                </button>
+              )}
+
+              {/* Cart Icon Badge */}
+              <button
+                onClick={() => setExibirResumoPedido(true)}
+                className="relative flex items-center gap-2 px-4 py-2 bg-[#9C1C0E]/10 text-[#9C1C0E] hover:bg-[#9C1C0E]/20 rounded-2xl transition-all cursor-pointer font-semibold text-xs sm:text-sm"
+              >
+                <MdShoppingBag size={20} />
+                <span className="hidden sm:inline">Meu Pedido</span>
+                {totalItensPedido > 0 && (
+                  <span className="bg-[#9C1C0E] text-white text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
+                    {totalItensPedido}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {mesaInfo.idMesa && (
-              <button
-                onClick={handleChamarGarcom}
-                disabled={chamandoGarcom}
-                className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
-                title="Solicitar a presença do garçom nesta mesa"
-              >
-                <span>🛎️</span>
-                <span>{chamandoGarcom ? 'Chamando...' : 'Chamar Garçom'}</span>
-              </button>
-            )}
 
-            {mesaInfo.numero && (
-              <span className="bg-[#b84226]/10 text-[#b84226] text-xs font-bold px-3 py-1 rounded-full">
-                Mesa #{mesaInfo.numero}
-              </span>
-            )}
-          </div>
+          {/* Search bar */}
+          <CampoPesquisa valor={termoBusca} onChange={setTermoBusca} />
+
+          {/* Category Filter Pills */}
+          <FiltroCategorias
+            categorias={categoriasDisponiveis}
+            categoriaSelecionada={categoriaSelecionada}
+            onSelecionarCategoria={setCategoriaSelecionada}
+          />
         </div>
-
-        {msgSucesso && (
-          <div className="max-w-4xl mx-auto mt-2 p-2.5 bg-emerald-600 text-white text-xs font-extrabold rounded-lg flex items-center justify-between shadow-md animate-bounce">
-            <span>{msgSucesso}</span>
-            <button onClick={() => setMsgSucesso(null)} className="ml-2 bg-emerald-800 px-2 py-0.5 rounded text-[10px]">✕</button>
-          </div>
-        )}
       </header>
 
-      {/* Categorias Tabs */}
-      <div className="sticky top-[61px] z-20 bg-white border-b border-stone-200 px-4 py-2.5 shadow-xs">
-        <div className="max-w-4xl mx-auto flex gap-2 overflow-x-auto no-scrollbar">
-          {categorias.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoriaAtiva(cat)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
-                categoriaAtiva === cat
-                  ? 'bg-[#b84226] text-white shadow-xs'
-                  : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+      {/* ─── Main Content Container ───────────────────────────────── */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+        {/* Results Info */}
+        <div className="flex items-center justify-between mb-4 px-1">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            {produtosFiltrados.length}{" "}
+            {produtosFiltrados.length === 1 ? "produto encontrado" : "produtos encontrados"}
+          </p>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <main className="max-w-4xl mx-auto p-4">
-        {erro && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-lg flex justify-between items-center">
-            <span>{erro}</span>
-            <button onClick={() => setErro(null)} className="font-bold ml-2">✕</button>
-          </div>
-        )}
-
+        {/* Loading Spinner */}
         {carregando ? (
-          <div className="flex flex-col items-center justify-center py-20 text-stone-400">
-            <div className="w-10 h-10 border-4 border-[#b84226] border-t-transparent rounded-full animate-spin mb-3"></div>
-            <p className="text-sm">Carregando cardápio...</p>
-          </div>
-        ) : itensFiltrados.length === 0 ? (
-          <div className="text-center py-20 text-stone-400">
-            <p className="text-lg font-medium">Nenhum item disponível nesta categoria.</p>
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <div className="w-10 h-10 border-4 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs text-gray-500 font-medium">
+              Carregando opções do cardápio...
+            </span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {itensFiltrados.map((item) => {
-              const imgUrl = getImagemUrl(item.pathImage);
-              const noCarrinho = carrinho.find((c) => c.idCardapio === item.idCardapio);
-
-              return (
-                <div
-                  key={item.idCardapio}
-                  className="bg-white rounded-xl shadow-xs border border-stone-200 p-4 flex gap-4 transition-all hover:shadow-md hover:border-stone-300"
-                >
-                  {/* Foto do item */}
-                  <div className="w-24 h-24 rounded-lg bg-stone-100 flex-shrink-0 overflow-hidden relative border border-stone-100">
-                    {imgUrl ? (
-                      <img
-                        src={imgUrl}
-                        alt={item.nome}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.target.onerror = null;
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-stone-300 text-2xl font-bold">
-                        🍽️
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Informações */}
-                  <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <h3 className="font-bold text-stone-900 text-base leading-tight">{item.nome}</h3>
-                      {item.descricao && (
-                        <p className="text-xs text-stone-500 mt-1 line-clamp-2">{item.descricao}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between mt-3">
-                      <span className="text-base font-extrabold text-[#b84226]">
-                        R$ {Number(item.preco).toFixed(2).replace('.', ',')}
-                      </span>
-
-                      {noCarrinho ? (
-                        <div className="flex items-center gap-2 bg-stone-100 rounded-full px-2 py-0.5 border border-stone-200">
-                          <button
-                            onClick={() => alterarQuantidade(item.idCardapio, -1)}
-                            className="w-6 h-6 flex items-center justify-center font-bold text-stone-600 hover:text-black"
-                          >
-                            -
-                          </button>
-                          <span className="text-xs font-bold w-4 text-center">{noCarrinho.quantidade}</span>
-                          <button
-                            onClick={() => alterarQuantidade(item.idCardapio, 1)}
-                            className="w-6 h-6 flex items-center justify-center font-bold text-stone-600 hover:text-black"
-                          >
-                            +
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => adicionarAoCarrinho(item)}
-                          className="bg-[#b84226] hover:bg-[#9c351c] text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-xs transition-colors"
-                        >
-                          + Adicionar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          /* Responsive Product Grid */
+          <GridProdutos
+            produtos={produtosFiltrados}
+            onSelectProduto={setProdutoSelecionado}
+            termoBusca={termoBusca}
+            categoriaSelecionada={categoriaSelecionada}
+          />
         )}
       </main>
 
-      {/* Floating Bottom Cart Bar */}
-      {totalItens > 0 && !isCarrinhoAberto && (
-        <div className="fixed bottom-4 inset-x-4 max-w-4xl mx-auto z-40">
+      {/* ─── Modal Screen 2: Item Details & Order Customization ───── */}
+      {produtoSelecionado && (
+        <ModalDetalhesProduto
+          produto={produtoSelecionado}
+          onClose={() => setProdutoSelecionado(null)}
+          onAdicionarAoPedido={handleAdicionarAoPedido}
+        />
+      )}
+
+      {/* ─── Floating Order Summary Drawer / Bar ──────────────────── */}
+      {carrinho.length > 0 && !exibirResumoPedido && (
+        <div className="fixed bottom-4 left-4 right-4 max-w-xl mx-auto z-30 animate-fade-in">
           <button
-            onClick={() => setIsCarrinhoAberto(true)}
-            className="w-full bg-[#b84226] text-white p-4 rounded-2xl shadow-xl flex items-center justify-between transition-transform active:scale-98"
+            onClick={() => setExibirResumoPedido(true)}
+            className="w-full bg-[#9C1C0E] hover:bg-[#7a160b] text-white px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 transition-all cursor-pointer transform hover:-translate-y-0.5"
           >
             <div className="flex items-center gap-3">
-              <span className="bg-white/20 text-white font-bold text-xs px-2.5 py-1 rounded-full">
-                {totalItens} {totalItens === 1 ? 'item' : 'itens'}
-              </span>
-              <span className="font-semibold text-sm">Ver Comanda / Carrinho</span>
+              <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center font-bold text-lg">
+                {totalItensPedido}
+              </div>
+              <div className="text-left">
+                <p className="text-xs text-white/80 font-medium">Ver pedido atual</p>
+                <p className="text-sm font-bold">
+                  {carrinho.length} {carrinho.length === 1 ? "item diferente" : "itens diferentes"}
+                </p>
+              </div>
             </div>
-            <span className="font-extrabold text-base">
-              R$ {totalCarrinho.toFixed(2).replace('.', ',')}
-            </span>
+
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-extrabold">
+                {valorTotalPedido.toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                })}
+              </span>
+              <span className="bg-white text-[#9C1C0E] text-xs font-bold px-3 py-1.5 rounded-xl">
+                Ver detalhes
+              </span>
+            </div>
           </button>
         </div>
       )}
 
-      {/* Cart Drawer Modal */}
-      {isCarrinhoAberto && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end">
-          <div className="bg-white w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
-            {/* Header */}
-            <div className="p-4 border-b border-stone-200 flex items-center justify-between">
-              <div>
-                <h2 className="font-bold text-lg text-stone-900">Seu Pedido</h2>
-                <p className="text-xs text-stone-500">
-                  {mesaInfo.numero ? `Comanda da Mesa #${mesaInfo.numero}` : 'Itens selecionados'}
-                </p>
-              </div>
-              <button
-                onClick={() => setIsCarrinhoAberto(false)}
-                className="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center text-stone-600 hover:bg-stone-200"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* List of items */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {carrinho.map((item) => (
-                <div key={item.idCardapio} className="border-b border-stone-100 pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-bold text-stone-900 text-sm">{item.nome}</h4>
-                      <span className="text-xs text-stone-500">
-                        R$ {Number(item.preco).toFixed(2).replace('.', ',')} un.
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-stone-100 rounded-full px-2 py-0.5">
-                      <button
-                        onClick={() => alterarQuantidade(item.idCardapio, -1)}
-                        className="w-5 h-5 flex items-center justify-center font-bold text-stone-600"
-                      >
-                        -
-                      </button>
-                      <span className="text-xs font-bold w-4 text-center">{item.quantidade}</span>
-                      <button
-                        onClick={() => alterarQuantidade(item.idCardapio, 1)}
-                        className="w-5 h-5 flex items-center justify-center font-bold text-stone-600"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Observação (ex: sem cebola, ponto da carne...)"
-                    value={item.observacao || ''}
-                    onChange={(e) => atualizarObservacao(item.idCardapio, e.target.value)}
-                    className="w-full mt-2 text-xs p-2 bg-stone-50 border border-stone-200 rounded-lg focus:outline-none focus:border-[#b84226]"
-                  />
+      {/* ─── Modal Resumo do Pedido Atual ─────────────────────────── */}
+      {exibirResumoPedido && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden my-auto p-6 space-y-6 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-4 border-gray-100">
+              <div className="flex items-center gap-2">
+                <MdShoppingBag size={24} className="text-[#9C1C0E]" />
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 leading-tight">Seu Pedido</h3>
+                  {mesaInfo.numero && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      Mesa {mesaInfo.numero}
+                    </span>
+                  )}
                 </div>
-              ))}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-stone-200 bg-stone-50">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-stone-600 text-sm font-medium">Total do Pedido:</span>
-                <span className="text-xl font-extrabold text-[#b84226]">
-                  R$ {totalCarrinho.toFixed(2).replace('.', ',')}
-                </span>
               </div>
-
               <button
-                onClick={finalizarPedido}
-                disabled={enviandoPedido || carrinho.length === 0}
-                className="w-full bg-[#b84226] hover:bg-[#9c351c] disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl shadow-md transition-colors flex items-center justify-center gap-2"
+                onClick={() => setExibirResumoPedido(false)}
+                className="text-gray-400 hover:text-gray-700 p-1 cursor-pointer"
               >
-                {enviandoPedido ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Enviando à Cozinha...</span>
-                  </>
-                ) : (
-                  <span>Confirmar e Enviar Pedido</span>
-                )}
+                <MdClose size={24} />
               </button>
             </div>
+
+            {carrinho.length === 0 ? (
+              <p className="text-center text-gray-500 py-8 text-sm">
+                Seu pedido está vazio. Selecione um item do cardápio!
+              </p>
+            ) : (
+              <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+                {carrinho.map((item, index) => (
+                  <div
+                    key={index}
+                    className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-start justify-between gap-3"
+                  >
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-[#9C1C0E]">
+                          {item.quantidade}x
+                        </span>
+                        <span className="font-bold text-sm text-gray-900">
+                          {item.produto.nome}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#B78A10] font-semibold">
+                        {(item.produto.preco * item.quantidade).toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        })}
+                      </p>
+
+                      {/* Removed ingredients */}
+                      {item.ingredientesRemovidos && item.ingredientesRemovidos.length > 0 && (
+                        <div className="mt-1 text-[11px] text-red-600 bg-red-50 p-1.5 rounded-lg border border-red-100">
+                          <span className="font-bold">Sem:</span>{" "}
+                          {item.ingredientesRemovidos.join(", ")}
+                        </div>
+                      )}
+
+                      {/* Observation */}
+                      {item.observacao && (
+                        <div className="mt-1 text-[11px] text-gray-600 italic">
+                          Obs: {item.observacao}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoverDoCarrinho(index)}
+                      className="text-gray-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                      title="Remover item"
+                    >
+                      <MdDelete size={20} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {carrinho.length > 0 && (
+              <div className="border-t pt-4 border-gray-100 space-y-4 shrink-0">
+                <div className="flex justify-between items-center text-base font-extrabold text-gray-900">
+                  <span>Total do Pedido:</span>
+                  <span className="text-[#9C1C0E] text-xl">
+                    {valorTotalPedido.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    })}
+                  </span>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setExibirResumoPedido(false)}
+                    className="flex-1 py-3 px-4 border border-gray-300 rounded-2xl text-sm font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer text-center"
+                  >
+                    Continuar Escolhendo
+                  </button>
+                  <button
+                    onClick={handleFinalizarPedido}
+                    disabled={enviandoPedido}
+                    className="flex-1 py-3 px-4 bg-[#9C1C0E] hover:bg-[#7a160b] text-white rounded-2xl text-sm font-bold shadow-lg shadow-[#9C1C0E]/20 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <MdCheckCircle size={18} />
+                    <span>{enviandoPedido ? "Enviando Pedido..." : "Finalizar Pedido"}</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
