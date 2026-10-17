@@ -52,6 +52,26 @@ export async function obterPedido(idPedido) {
   return response.json();
 }
 
+export async function listarPedidos(params = {}) {
+  const query = new URLSearchParams();
+  if (params.idRestaurante) query.set('idRestaurante', params.idRestaurante);
+  if (params.status) query.set('status', params.status);
+  if (params.tipo) query.set('tipo', params.tipo);
+
+  const queryString = query.toString() ? `?${query.toString()}` : '';
+  const response = await fetch(`${BASE_URL}/pedidos${queryString}`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao listar pedidos.');
+  }
+
+  return response.json();
+}
+
 export async function obterTrackingPedido(idPedido) {
   const response = await fetch(`${BASE_URL}/pedidos/${idPedido}/tracking`, {
     method: 'GET',

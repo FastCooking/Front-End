@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MdReceiptLong, MdRestaurantMenu, MdClose, MdAccessTime, MdPerson, MdDelete } from "react-icons/md";
+import { MdReceiptLong, MdRestaurantMenu, MdClose, MdAccessTime, MdPerson, MdDelete, MdTimeline, MdLaunch } from "react-icons/md";
 import { obterPedidoAtivoMesa } from "../../services/mesaService";
 import { cancelarItemPedido } from "../../services/pedidoService";
 
@@ -167,7 +167,22 @@ export default function ModalComandaMesa({ mesa, onClose }) {
           </div>
         )}
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          {comanda?.idPedido ? (
+            <button
+              type="button"
+              onClick={() => window.open(`/tracking/${comanda.idPedido}`, "_blank")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              title="Acompanhar o preparo e status em tempo real na tela de tracking"
+            >
+              <MdTimeline size={18} />
+              <span>Acompanhar no Tracking</span>
+              <MdLaunch size={14} />
+            </button>
+          ) : (
+            <div />
+          )}
+
           <button
             type="button"
             onClick={onClose}

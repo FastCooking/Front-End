@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useOrderTrackingSocket } from './hooks/useOrderTrackingSocket';
-import { chamarGarcom } from '../../services/pedidoService';
+import { chamarGarcom, obterPedidoAtivoMesa } from '../../services/pedidoService';
 
 import ConnectionBanner from './components/ConnectionBanner';
 import OrderProgressBar from './components/OrderProgressBar';
@@ -43,12 +43,43 @@ function getElapsedTime(createdAt) {
  * Aceita o ID do pedido via:
  * - Route param: `/tracking/:orderId`
  * - Query param: `/tracking?orderId=...`
+ * - Resolução por mesa: `/tracking?idMesa=...`
  */
 export default function OrderTracking() {
   const { orderId: paramId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const orderId = paramId || searchParams.get('orderId');
+  const rawOrderId = paramId || searchParams.get('orderId');
+
+  const [activeOrderId, setActiveOrderId] = useState(rawOrderId || null);
+  const [buscandoMesa, setBuscandoMesa] = useState(false);
+  const [inputBusca, setInputBusca] = useState('');
+  const [erroMesa, setErroMesa] = useState('');
+
+  useEffect(() => {
+    if (rawOrderId) {
+      setActiveOrderId(rawOrderId);
+      return;
+    }
+
+    const idMesa = searchParams.get('idMesa');
+    if (idMesa) {
+      setBuscandoMesa(true);
+      setErroMesa('');
+      obterPedidoAtivoMesa(idMesa)
+        .then((dados) => {
+          if (dados && dados.idPedido) {
+            setActiveOrderId(dados.idPedido);
+          } else {
+            setErroMesa('Nenhum pedido ativo em preparo encontrado para esta mesa no momento.');
+          }
+        })
+        .catch(() => {
+          setErroMesa('Não foi possível localizar pedidos ativos para a mesa indicada.');
+        })
+        .finally(() => setBuscandoMesa(false));
+    }
+  }, [rawOrderId, searchParams]);
 
   const {
     order,
@@ -56,7 +87,7 @@ export default function OrderTracking() {
     error,
     isLoading,
     reconnectAttempt,
-  } = useOrderTrackingSocket(orderId);
+  } = useOrderTrackingSocket(activeOrderId);
 
   const [chamandoGarcom, setChamandoGarcom] = useState(false);
   const [alertaGarcom, setAlertaGarcom] = useState(null);
@@ -87,9 +118,80 @@ export default function OrderTracking() {
     }
   }
 
-  // ─── Estado: sem orderId ──────────────────────────────────────
-  if (!orderId) {
-    return <OrderNotFound message="Nenhum código de pedido foi informado na URL." />;
+  // ─── Estado: sem activeOrderId ─────────────────────────────────
+  if (!activeOrderId) {
+    if (buscandoMesa) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-[#F9ECE5] via-white to-[#F9ECE5] flex flex-col items-center justify-center p-4">
+          <div className="w-12 h-12 border-4 border-[#9C1C0E] border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-gray-700 font-semibold text-sm">Localizando pedido da mesa...</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F9ECE5] via-white to-[#F9ECE5] font-[Poppins] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white/90 backdrop-blur-md p-8 rounded-3xl shadow-xl border border-gray-100 text-center animate-fade-in">
+          <img src={logo} alt="FastCooking" className="h-12 mx-auto mb-4 object-contain" />
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Acompanhamento de Pedido</h1>
+          <p className="text-gray-500 text-xs sm:text-sm mb-6">
+            Acompanhe em tempo real o status de preparo dos itens do seu pedido na cozinha.
+          </p>
+
+          {erroMesa && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs p-3 rounded-xl mb-4 font-medium">
+              {erroMesa}
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (inputBusca.trim()) {
+                navigate(`/tracking/${inputBusca.trim()}`);
+              }
+            }}
+            className="space-y-4 text-left"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Código do Pedido ou ID:
+              </label>
+              <input
+                type="text"
+                value={inputBusca}
+                onChange={(e) => setInputBusca(e.target.value)}
+                placeholder="Ex: 550e8400-e29b-41d4-a716-..."
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={!inputBusca.trim()}
+              className="w-full py-3 bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50"
+            >
+              Rastrear Pedido
+            </button>
+          </form>
+
+          <div className="mt-6 pt-6 border-t border-gray-100 flex flex-col gap-2">
+            <button
+              onClick={() => navigate('/cardapio')}
+              className="text-xs text-[#9C1C0E] hover:underline font-semibold cursor-pointer"
+            >
+              Ir para o Cardápio / Autoatendimento
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+            >
+              Voltar à Página Inicial
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ─── Estado: carregando ───────────────────────────────────────

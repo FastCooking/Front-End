@@ -23,6 +23,15 @@ import {
   MdQrCode2,
   MdReceiptLong,
   MdLaunch,
+  MdTimeline,
+  MdRefresh,
+  MdCheckCircle,
+  MdAccessTime,
+  MdAttachMoney,
+  MdArrowForward,
+  MdInfoOutline,
+  MdCreditCard,
+  MdClose,
 } from "react-icons/md";
 
 import {
@@ -43,6 +52,7 @@ import {
   atualizarMesa,
   excluirMesa,
 } from "../services/mesaService";
+import { obterFilaKds, listarPedidos } from "../services/pedidoService";
 
 import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
 import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
@@ -120,6 +130,24 @@ function TelaGerente() {
   const [mesaEdicao, setMesaEdicao] = useState(null);
   const [mesaQrCode, setMesaQrCode] = useState(null);
   const [mesaComanda, setMesaComanda] = useState(null);
+
+  // Estados de Dados Cozinha (KDS)
+  const [filaKds, setFilaKds] = useState([]);
+  const [carregandoKds, setCarregandoKds] = useState(false);
+  const [filtroStatusKds, setFiltroStatusKds] = useState("Todos");
+
+  // Estados de Dados Pedidos Ativos
+  const [pedidosAtivos, setPedidosAtivos] = useState([]);
+  const [carregandoPedidos, setCarregandoPedidos] = useState(false);
+  const [buscaPedido, setBuscaPedido] = useState("");
+  const [filtroStatusPedido, setFiltroStatusPedido] = useState("Todos");
+
+  // Estados de Dados Histórico de Pedidos
+  const [historicoPedidos, setHistoricoPedidos] = useState([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [buscaHistorico, setBuscaHistorico] = useState("");
+  const [filtroStatusHistorico, setFiltroStatusHistorico] = useState("Todos");
+  const [detalhesHistoricoModal, setDetalhesHistoricoModal] = useState(null);
 
   // Cargos permitidos para o Gerente criar/editar (estritamente inferiores a Gerente)
   const CARGOS_PERMITIDOS_GERENTE = ["Garcom", "Cozinheiro"];
@@ -296,6 +324,85 @@ function TelaGerente() {
     };
   }, [abaAtiva, carregarMesas]);
 
+  // 6. Carregar Cozinha (KDS)
+  const carregarKds = useCallback(async () => {
+    try {
+      setCarregandoKds(true);
+      const dados = await obterFilaKds();
+      setFilaKds(dados?.items || []);
+    } catch (err) {
+      console.warn("Erro ao carregar fila KDS:", err);
+    } finally {
+      setCarregandoKds(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+    if (abaAtiva === "cozinha") {
+      carregarKds();
+      const intervalId = setInterval(() => {
+        if (ativo) carregarKds();
+      }, 10000);
+      return () => {
+        ativo = false;
+        clearInterval(intervalId);
+      };
+    }
+  }, [abaAtiva, carregarKds]);
+
+  // 7. Carregar Pedidos Ativos
+  const carregarPedidos = useCallback(async () => {
+    if (!idRestauranteGerente) return;
+    try {
+      setCarregandoPedidos(true);
+      const dados = await listarPedidos({ idRestaurante: idRestauranteGerente, tipo: "ativos" });
+      setPedidosAtivos(dados || []);
+    } catch (err) {
+      console.warn("Erro ao carregar pedidos ativos:", err);
+    } finally {
+      setCarregandoPedidos(false);
+    }
+  }, [idRestauranteGerente]);
+
+  useEffect(() => {
+    let ativo = true;
+    if (abaAtiva === "pedidos") {
+      carregarPedidos();
+      const intervalId = setInterval(() => {
+        if (ativo) carregarPedidos();
+      }, 10000);
+      return () => {
+        ativo = false;
+        clearInterval(intervalId);
+      };
+    }
+  }, [abaAtiva, carregarPedidos]);
+
+  // 8. Carregar Histórico de Pedidos
+  const carregarHistorico = useCallback(async () => {
+    if (!idRestauranteGerente) return;
+    try {
+      setCarregandoHistorico(true);
+      const dados = await listarPedidos({ idRestaurante: idRestauranteGerente, tipo: "historico" });
+      setHistoricoPedidos(dados || []);
+    } catch (err) {
+      console.warn("Erro ao carregar histórico de pedidos:", err);
+    } finally {
+      setCarregandoHistorico(false);
+    }
+  }, [idRestauranteGerente]);
+
+  useEffect(() => {
+    let ativo = true;
+    if (abaAtiva === "historico") {
+      carregarHistorico();
+    }
+    return () => {
+      ativo = false;
+    };
+  }, [abaAtiva, carregarHistorico]);
+
   async function handleExcluirMesa(m) {
     const confirmou = window.confirm(
       `Deseja realmente remover a Mesa #${m.numero}? Esta ação não pode ser desfeita.`
@@ -445,6 +552,48 @@ function TelaGerente() {
     }
     return true;
   });
+
+  // Filtros de exibição da cozinha (KDS)
+  const filaKdsFiltrada = filaKds.filter((item) => {
+    if (filtroStatusKds !== "Todos" && item.status !== filtroStatusKds) {
+      return false;
+    }
+    return true;
+  });
+
+  // Filtros de exibição dos pedidos ativos
+  const pedidosFiltrados = pedidosAtivos.filter((p) => {
+    if (buscaPedido.trim()) {
+      const termo = buscaPedido.toLowerCase().trim();
+      const bateMesa = String(p.numeroMesa).includes(termo);
+      const bateId = String(p.idPedido).toLowerCase().includes(termo);
+      const bateGarcom = p.nomeGarcom?.toLowerCase().includes(termo);
+      if (!bateMesa && !bateId && !bateGarcom) return false;
+    }
+    if (filtroStatusPedido !== "Todos" && p.status !== filtroStatusPedido) {
+      return false;
+    }
+    return true;
+  });
+
+  // Filtros de exibição do histórico de pedidos
+  const historicoFiltrado = historicoPedidos.filter((h) => {
+    if (buscaHistorico.trim()) {
+      const termo = buscaHistorico.toLowerCase().trim();
+      const bateMesa = String(h.numeroMesa).includes(termo);
+      const bateId = String(h.idPedido).toLowerCase().includes(termo);
+      if (!bateMesa && !bateId) return false;
+    }
+    if (filtroStatusHistorico !== "Todos" && h.status !== filtroStatusHistorico) {
+      return false;
+    }
+    return true;
+  });
+
+  const pedidosFechados = historicoPedidos.filter((h) => h.status === "Fechado");
+  const pedidosCancelados = historicoPedidos.filter((h) => h.status === "Cancelado");
+  const totalFaturado = pedidosFechados.reduce((acc, h) => acc + (Number(h.total) || 0), 0);
+  const ticketMedio = pedidosFechados.length > 0 ? totalFaturado / pedidosFechados.length : 0;
 
   return (
     <div className="min-h-screen bg-linear-to-r from-[#F9ECE5] to-[#D4C8C0] pb-12">
@@ -1169,14 +1318,31 @@ function TelaGerente() {
                             </button>
                           </td>
                           <td className="px-6 py-4">
-                            <button
-                              onClick={() => setMesaComanda(m)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
-                              title="Visualizar itens e consumo ativo da mesa"
-                            >
-                              <MdReceiptLong size={18} />
-                              <span>Ver Comanda</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setMesaComanda(m)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                                title="Visualizar itens e consumo ativo da mesa"
+                              >
+                                <MdReceiptLong size={18} />
+                                <span>Ver Comanda</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (m.idPedidoAtivo) {
+                                    window.open(`/tracking/${m.idPedidoAtivo}`, "_blank");
+                                  } else {
+                                    setMesaComanda(m);
+                                  }
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-[#9C1C0E] border border-amber-200 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                                title="Acompanhar status do preparo dos pedidos desta mesa em tempo real"
+                              >
+                                <MdTimeline size={16} />
+                                <span>Tracking</span>
+                                <MdLaunch size={12} />
+                              </button>
+                            </div>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1217,15 +1383,458 @@ function TelaGerente() {
           </div>
         )}
 
-        {/* ================= ABAS MOCK (COZINHA, PEDIDOS, HISTÓRICO) ================= */}
-        {(abaAtiva === "cozinha" || abaAtiva === "pedidos" || abaAtiva === "historico") && (
-          <div className="bg-white/80 backdrop-blur-xs p-12 rounded-2xl shadow-md border border-gray-200 text-center">
-            <h2 className="text-xl font-bold text-[#9C1C0E] mb-2 capitalize">
-              Módulo de {abaAtiva}
-            </h2>
-            <p className="text-gray-500 text-sm">
-              Esta seção está reservada para as funcionalidades de {abaAtiva} do restaurante.
-            </p>
+        {/* ================= ABA COZINHA (KDS EM TEMPO REAL) ================= */}
+        {abaAtiva === "cozinha" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <MdSoupKitchen className="text-[#9C1C0E]" size={24} />
+                  Fila da Cozinha (KDS em Tempo Real)
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Supervisão em tempo real da produção dos pedidos na cozinha do restaurante.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={filtroStatusKds}
+                  onChange={(e) => setFiltroStatusKds(e.target.value)}
+                  className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="Todos">Todos os Itens ({filaKds.length})</option>
+                  <option value="Pendente">Pendentes ({filaKds.filter((i) => i.status === "Pendente").length})</option>
+                  <option value="Em preparo">Em preparo ({filaKds.filter((i) => i.status === "Em preparo").length})</option>
+                  <option value="Pronto">Prontos ({filaKds.filter((i) => i.status === "Pronto").length})</option>
+                </select>
+
+                <button
+                  onClick={carregarKds}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer"
+                  title="Atualizar fila da cozinha"
+                >
+                  <MdRefresh className={carregandoKds ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
+                  <span>Atualizar</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[#F9ECE5] border border-[#B78A10]/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-700">
+              <div className="flex items-center gap-2.5">
+                <MdInfoOutline className="text-[#9C1C0E] shrink-0" size={20} />
+                <span>
+                  <strong>Visão Gerencial:</strong> Esta fila reflete a priorização calculada pelo motor KDS da cozinha. O avanço de status de preparo é realizado pelos Cozinheiros.
+                </span>
+              </div>
+              <span className="text-[11px] font-bold text-[#9C1C0E] bg-white px-2.5 py-1 rounded-lg border border-[#9C1C0E]/20">
+                Sincronização a cada 10s
+              </span>
+            </div>
+
+            {carregandoKds && filaKds.length === 0 ? (
+              <div className="text-center py-16 text-gray-500 bg-white/80 rounded-2xl border border-gray-200">
+                <div className="w-10 h-10 border-4 border-[#9C1C0E] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                <span className="text-xs">Carregando fila da cozinha...</span>
+              </div>
+            ) : filaKdsFiltrada.length === 0 ? (
+              <div className="text-center py-16 bg-white/80 rounded-2xl border border-gray-200 p-8">
+                <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <MdCheckCircle size={32} />
+                </div>
+                <h3 className="text-base font-bold text-gray-900 mb-1">Cozinha sem pedidos pendentes!</h3>
+                <p className="text-xs text-gray-500">Todos os pedidos estão em dia ou não há novos itens aguardando preparo.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filaKdsFiltrada.map((item) => (
+                  <div
+                    key={item.idItemPedido}
+                    className={`bg-white rounded-2xl p-5 border shadow-xs transition-all flex flex-col justify-between ${
+                      item.status === "Em preparo"
+                        ? "border-amber-300 ring-2 ring-amber-100"
+                        : item.status === "Pronto"
+                        ? "border-green-300"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="bg-[#9C1C0E] text-white text-xs font-black px-2.5 py-1 rounded-lg">
+                          Mesa #{item.numeroMesa || "--"}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                            item.status === "Em preparo"
+                              ? "bg-amber-100 text-amber-800"
+                              : item.status === "Pronto"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <h4 className="text-base font-bold text-gray-900 leading-snug">
+                        {item.quantidade}x {item.nomeItem || "Item"}
+                      </h4>
+                      <p className="text-xs text-gray-500 mb-2">{item.categoria || "Geral"}</p>
+
+                      {item.observacao && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-xs text-amber-900 font-medium mb-3">
+                          ⚠️ Obs: {item.observacao}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <MdAccessTime size={14} />
+                        {item.dataCriacao
+                          ? new Date(item.dataCriacao).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                          : "--:--"}
+                      </span>
+                      {item.idPedido && (
+                        <button
+                          onClick={() => window.open(`/tracking/${item.idPedido}`, "_blank")}
+                          className="text-xs text-[#9C1C0E] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                        >
+                          <MdTimeline size={14} />
+                          <span>Tracking</span>
+                          <MdLaunch size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================= ABA PEDIDOS (PEDIDOS ATIVOS NO RESTAURANTE) ================= */}
+        {abaAtiva === "pedidos" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                <div className="relative flex-1 min-w-[200px]">
+                  <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Buscar por mesa, código ou garçom..."
+                    value={buscaPedido}
+                    onChange={(e) => setBuscaPedido(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+                  />
+                </div>
+
+                <select
+                  value={filtroStatusPedido}
+                  onChange={(e) => setFiltroStatusPedido(e.target.value)}
+                  className="bg-white/70 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="Todos">Todos os Status ({pedidosAtivos.length})</option>
+                  <option value="Aberto">Aberto</option>
+                  <option value="Em preparo">Em preparo</option>
+                  <option value="Pronto">Pronto</option>
+                </select>
+              </div>
+
+              <button
+                onClick={carregarPedidos}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
+              >
+                <MdRefresh className={carregandoPedidos ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
+                <span>Atualizar Pedidos</span>
+              </button>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-gray-700">
+                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 font-semibold">Mesa</th>
+                      <th className="px-6 py-3 font-semibold">Horário</th>
+                      <th className="px-6 py-3 font-semibold">Itens do Pedido</th>
+                      <th className="px-6 py-3 font-semibold">Total</th>
+                      <th className="px-6 py-3 font-semibold">Status</th>
+                      <th className="px-6 py-3 font-semibold text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {carregandoPedidos ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-gray-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs">Carregando pedidos ativos...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : pedidosFiltrados.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-12 text-gray-500 text-xs">
+                          Nenhum pedido ativo encontrado no restaurante no momento.
+                        </td>
+                      </tr>
+                    ) : (
+                      pedidosFiltrados.map((p) => (
+                        <tr key={p.idPedido} className="hover:bg-white/50 transition-colors">
+                          <td className="px-6 py-4 font-bold text-gray-900">
+                            <span className="inline-flex items-center gap-1 bg-[#9C1C0E]/10 text-[#9C1C0E] px-2.5 py-1 rounded-lg">
+                              <MdTableBar size={16} /> Mesa #{p.numeroMesa || "--"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-gray-500">
+                            {p.dataAbertura
+                              ? new Date(p.dataAbertura).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                              : "--:--"}
+                          </td>
+                          <td className="px-6 py-4 text-xs">
+                            <div className="space-y-1 max-w-xs">
+                              {p.itens?.map((it, idx) => (
+                                <div key={idx} className="flex items-center justify-between gap-2">
+                                  <span className="truncate">
+                                    {it.quantidade}x {it.nome}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                                      it.status === "Pronto"
+                                        ? "bg-green-100 text-green-700"
+                                        : it.status === "Em preparo"
+                                        ? "bg-amber-100 text-amber-700"
+                                        : it.status === "Cancelado"
+                                        ? "bg-red-100 text-red-700 line-through"
+                                        : "bg-gray-100 text-gray-600"
+                                    }`}
+                                  >
+                                    {it.status}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-gray-900 text-xs">
+                            R$ {Number(p.total || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                p.status === "Pronto"
+                                  ? "bg-green-100 text-green-800"
+                                  : p.status === "Em preparo"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-blue-100 text-blue-800"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => window.open(`/tracking/${p.idPedido}`, "_blank")}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+                                title="Acompanhar status na tela de tracking em tempo real"
+                              >
+                                <MdTimeline size={16} />
+                                <span>Tracking</span>
+                                <MdLaunch size={12} />
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  const mesaObj = mesas.find((m) => String(m.idMesa) === String(p.idMesa)) || {
+                                    idMesa: p.idMesa,
+                                    numero: p.numeroMesa,
+                                  };
+                                  setMesaComanda(mesaObj);
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-xl transition-all cursor-pointer"
+                                title="Ver comanda completa e gerenciar itens"
+                              >
+                                <MdReceiptLong size={16} />
+                                <span>Comanda</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= ABA HISTÓRICO (VENDAS E PEDIDOS ENCERRADOS) ================= */}
+        {abaAtiva === "historico" && (
+          <div className="space-y-6">
+            {/* KPI Financeiros */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white/80 p-5 rounded-2xl border border-gray-200 shadow-xs">
+                <span className="text-xs text-gray-500 font-medium">Total Faturado</span>
+                <div className="text-2xl font-black text-[#9C1C0E] mt-1">
+                  R$ {totalFaturado.toFixed(2)}
+                </div>
+                <span className="text-[11px] text-emerald-600 font-semibold mt-1 inline-block">
+                  {pedidosFechados.length} pedidos pagos
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-5 rounded-2xl border border-gray-200 shadow-xs">
+                <span className="text-xs text-gray-500 font-medium">Ticket Médio</span>
+                <div className="text-2xl font-black text-gray-900 mt-1">
+                  R$ {ticketMedio.toFixed(2)}
+                </div>
+                <span className="text-[11px] text-gray-400 mt-1 inline-block">
+                  Por pedido finalizado
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-5 rounded-2xl border border-gray-200 shadow-xs">
+                <span className="text-xs text-gray-500 font-medium">Pedidos Finalizados</span>
+                <div className="text-2xl font-black text-emerald-700 mt-1">
+                  {pedidosFechados.length}
+                </div>
+                <span className="text-[11px] text-gray-400 mt-1 inline-block">
+                  Fechados e pagos
+                </span>
+              </div>
+
+              <div className="bg-white/80 p-5 rounded-2xl border border-gray-200 shadow-xs">
+                <span className="text-xs text-gray-500 font-medium">Pedidos Cancelados</span>
+                <div className="text-2xl font-black text-red-600 mt-1">
+                  {pedidosCancelados.length}
+                </div>
+                <span className="text-[11px] text-gray-400 mt-1 inline-block">
+                  Sem faturamento
+                </span>
+              </div>
+            </div>
+
+            {/* Filtros Histórico */}
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                <div className="relative flex-1 min-w-[200px]">
+                  <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Buscar por mesa ou código no histórico..."
+                    value={buscaHistorico}
+                    onChange={(e) => setBuscaHistorico(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+                  />
+                </div>
+
+                <select
+                  value={filtroStatusHistorico}
+                  onChange={(e) => setFiltroStatusHistorico(e.target.value)}
+                  className="bg-white/70 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="Todos">Todos os Status ({historicoPedidos.length})</option>
+                  <option value="Fechado">Fechados ({pedidosFechados.length})</option>
+                  <option value="Cancelado">Cancelados ({pedidosCancelados.length})</option>
+                </select>
+              </div>
+
+              <button
+                onClick={carregarHistorico}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
+              >
+                <MdRefresh className={carregandoHistorico ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
+                <span>Atualizar Histórico</span>
+              </button>
+            </div>
+
+            {/* Tabela do Histórico */}
+            <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-gray-700">
+                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 font-semibold">Data / Horário</th>
+                      <th className="px-6 py-3 font-semibold">Mesa</th>
+                      <th className="px-6 py-3 font-semibold">Pagamento</th>
+                      <th className="px-6 py-3 font-semibold">Total</th>
+                      <th className="px-6 py-3 font-semibold">Status</th>
+                      <th className="px-6 py-3 font-semibold text-right">Detalhes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {carregandoHistorico ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-gray-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs">Carregando histórico de pedidos...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : historicoFiltrado.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-12 text-gray-500 text-xs">
+                          Nenhum pedido finalizado no histórico até o momento.
+                        </td>
+                      </tr>
+                    ) : (
+                      historicoFiltrado.map((h) => {
+                        const formaPag = h.pagamentos?.[0]?.formaPagamento || "Não informado";
+                        return (
+                          <tr key={h.idPedido} className="hover:bg-white/50 transition-colors">
+                            <td className="px-6 py-4 text-xs text-gray-600">
+                              <div className="font-semibold text-gray-900">
+                                {h.dataAbertura ? new Date(h.dataAbertura).toLocaleDateString("pt-BR") : "--"}
+                              </div>
+                              <div className="text-[11px] text-gray-400">
+                                {h.dataAbertura
+                                  ? new Date(h.dataAbertura).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                                  : "--:--"}
+                                {h.dataFechamento
+                                  ? ` → ${new Date(h.dataFechamento).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                  : ""}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-gray-900">
+                              Mesa #{h.numeroMesa || "--"}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-gray-700">
+                              <span className="inline-flex items-center gap-1 bg-gray-100 px-2.5 py-1 rounded-md text-gray-800 font-medium">
+                                <MdCreditCard size={14} className="text-[#9C1C0E]" />
+                                {formaPag}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-gray-900 text-xs">
+                              R$ {Number(h.total || 0).toFixed(2)}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  h.status === "Fechado" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {h.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button
+                                onClick={() => setDetalhesHistoricoModal(h)}
+                                className="px-3 py-1.5 bg-white border border-gray-200 hover:border-[#9C1C0E] hover:text-[#9C1C0E] text-xs font-semibold rounded-xl transition-all shadow-xs cursor-pointer"
+                              >
+                                Ver Detalhes
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </main>
@@ -1336,6 +1945,90 @@ function TelaGerente() {
           mesa={mesaComanda}
           onClose={() => setMesaComanda(null)}
         />
+      )}
+
+      {/* Modal de Detalhes do Histórico de Pedido */}
+      {detalhesHistoricoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 md:p-8 animate-fade-in">
+            <div className="flex justify-between items-center mb-4 border-b pb-3 border-[#B78A10]/30">
+              <div>
+                <h2 className="text-xl font-bold text-[#9C1C0E] flex items-center gap-2">
+                  <MdHistory size={24} /> Pedido #{detalhesHistoricoModal.numeroMesa ? `Mesa ${detalhesHistoricoModal.numeroMesa}` : detalhesHistoricoModal.idPedido.slice(0, 8)}
+                </h2>
+                <p className="text-xs text-gray-500">
+                  Status: <strong className={detalhesHistoricoModal.status === "Fechado" ? "text-emerald-700" : "text-red-700"}>{detalhesHistoricoModal.status}</strong>
+                </p>
+              </div>
+              <button
+                onClick={() => setDetalhesHistoricoModal(null)}
+                className="text-gray-400 hover:text-gray-700 text-2xl font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-[#F9ECE5]/60 p-3 rounded-xl text-xs text-gray-700 flex flex-wrap justify-between gap-2">
+                <span>Abertura: <strong>{detalhesHistoricoModal.dataAbertura ? new Date(detalhesHistoricoModal.dataAbertura).toLocaleString("pt-BR") : "--"}</strong></span>
+                <span>Fechamento: <strong>{detalhesHistoricoModal.dataFechamento ? new Date(detalhesHistoricoModal.dataFechamento).toLocaleString("pt-BR") : "--"}</strong></span>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">Itens Consumidos:</h4>
+                <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-100 rounded-xl p-2">
+                  {detalhesHistoricoModal.itens?.map((it, idx) => (
+                    <div key={idx} className="py-2 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-semibold text-gray-900">{it.quantidade}x {it.nome}</span>
+                        {it.observacao && <p className="text-[11px] text-gray-400 italic">Obs: {it.observacao}</p>}
+                      </div>
+                      <span className="font-bold text-gray-800">
+                        R$ {((Number(it.precoUnitario) || 0) * (it.quantidade || 1)).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {detalhesHistoricoModal.pagamentos && detalhesHistoricoModal.pagamentos.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">Pagamento Registrado:</h4>
+                  <div className="bg-gray-50 rounded-xl p-3 space-y-1 text-xs">
+                    {detalhesHistoricoModal.pagamentos.map((pg, idx) => (
+                      <div key={idx} className="flex justify-between items-center">
+                        <span className="flex items-center gap-1 font-semibold text-gray-800">
+                          <MdCreditCard className="text-[#9C1C0E]" size={16} />
+                          {pg.formaPagamento}
+                        </span>
+                        <span className="font-bold text-gray-900">
+                          R$ {Number(pg.valor || 0).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
+                <span className="text-sm font-bold text-gray-700">Total do Pedido:</span>
+                <span className="text-xl font-black text-[#9C1C0E]">
+                  R$ {Number(detalhesHistoricoModal.total || 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDetalhesHistoricoModal(null)}
+                className="px-5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
