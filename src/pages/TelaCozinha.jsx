@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { obterFilaKds, alterarStatusItem } from '../services/pedidoService';
 import logo from '../assets/fast cooking logo.png';
 
-const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 function buildWsUrl() {
   const wsBase = BASE_URL.replace(/^http/, 'ws');

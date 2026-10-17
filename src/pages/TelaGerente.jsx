@@ -698,7 +698,7 @@ function TelaGerente() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {itensCardapioFiltrados.map((item) => {
-                      const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+                      const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
                       const imgUrl = item.pathImage || item.imagemUrl || item.imagem_url;
                       const fullImgUrl = imgUrl ? (imgUrl.startsWith("http") ? imgUrl : `${API_BASE}${imgUrl}`) : null;
 

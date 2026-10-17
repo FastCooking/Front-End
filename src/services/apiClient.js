@@ -1,4 +1,4 @@
-const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 export function getAuthToken() {
   return localStorage.getItem('token');

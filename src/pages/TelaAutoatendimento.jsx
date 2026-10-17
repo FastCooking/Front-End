@@ -180,7 +180,7 @@ export default function TelaAutoatendimento() {
     }
   }
 
-  const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+  const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
   function getImagemUrl(path) {
     if (!path) return null;

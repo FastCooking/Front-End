@@ -39,7 +39,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     "Outros",
   ];
 
-  const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
+  const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
   // 1. Carregar Insumos de Estoque e Ficha Técnica Existente
   useEffect(() => {

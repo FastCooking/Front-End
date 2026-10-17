@@ -1,6 +1,6 @@
 import { renovarToken, getAuthHeaders, fetchComAuth } from './apiClient';
 
-const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 const API_URL = `${BASE_URL}/auth`;
 
 /**

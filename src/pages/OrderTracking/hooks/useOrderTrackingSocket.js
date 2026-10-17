@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  * @typedef {import('../types').ConnectionStatus} ConnectionStatus
  */
 
-const BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 /**
  * Calcula o delay de backoff exponencial com jitter.
