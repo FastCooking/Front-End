@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useOrderTrackingSocket } from './hooks/useOrderTrackingSocket';
 import { chamarGarcom } from '../../services/pedidoService';
 
@@ -47,6 +47,7 @@ function getElapsedTime(createdAt) {
 export default function OrderTracking() {
   const { orderId: paramId } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const orderId = paramId || searchParams.get('orderId');
 
   const {
@@ -59,6 +60,14 @@ export default function OrderTracking() {
 
   const [chamandoGarcom, setChamandoGarcom] = useState(false);
   const [alertaGarcom, setAlertaGarcom] = useState(null);
+
+  function handleVoltarAoCardapio() {
+    const params = new URLSearchParams();
+    if (order?.idMesa) params.set('idMesa', order.idMesa);
+    if (order?.idRestaurante) params.set('idRestaurante', order.idRestaurante);
+    if (order?.tableNumber) params.set('mesa', order.tableNumber);
+    navigate(`/cardapio?${params.toString()}`);
+  }
 
   async function handleChamarGarcom() {
     const mesaId = order?.idMesa;
@@ -115,41 +124,56 @@ export default function OrderTracking() {
       {/* Banner de conexão */}
       <ConnectionBanner connectionStatus={connectionStatus} reconnectAttempt={reconnectAttempt} />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
+      <div className="max-w-2xl mx-auto px-3 sm:px-6 py-5 sm:py-10">
+        {/* Barra superior com botão Voltar ao Cardápio */}
+        <div className="flex items-center justify-between gap-2 mb-6">
+          <button
+            onClick={handleVoltarAoCardapio}
+            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white/90 hover:bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+            title="Voltar ao cardápio de autoatendimento"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            <span>Voltar ao Cardápio</span>
+          </button>
+
+          {order?.idMesa && (
+            <button
+              onClick={handleChamarGarcom}
+              disabled={chamandoGarcom}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all active:scale-95 disabled:opacity-50"
+              title="Chamar o garçom até a sua mesa"
+            >
+              <span>🛎️</span>
+              <span>{chamandoGarcom ? 'Chamando...' : 'Chamar Garçom'}</span>
+            </button>
+          )}
+        </div>
+
         {/* ─── Header ─────────────────────────────────────────── */}
-        <header className="text-center mb-10">
-          <a href="/" className="inline-block mb-4">
-            <img src={logo} alt="Fast Cooking" className="h-10 mx-auto" />
+        <header className="text-center mb-6 sm:mb-10">
+          <a href="/" className="inline-block mb-3 sm:mb-4">
+            <img src={logo} alt="Fast Cooking" className="h-8 sm:h-10 mx-auto" />
           </a>
-          <span className="text-[#B78A10] font-semibold text-xs uppercase tracking-widest block mb-2">
+          <span className="text-[#B78A10] font-semibold text-[11px] sm:text-xs uppercase tracking-widest block mb-1">
             Acompanhamento de Pedido
           </span>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-3xl font-bold text-gray-900">
             Pedido #{order?.id}
           </h1>
-          <div className="flex items-center justify-center gap-3 mt-3 text-sm text-gray-500">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-2 text-xs sm:text-sm text-gray-500">
             {order?.tableNumber && (
-              <span className="inline-flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <span className="inline-flex items-center gap-1 bg-white/70 px-2.5 py-1 rounded-md border border-gray-200">
+                <svg className="w-3.5 h-3.5 text-[#9C1C0E]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
                 </svg>
                 Mesa {order.tableNumber}
               </span>
             )}
-            {order?.idMesa && (
-              <button
-                onClick={handleChamarGarcom}
-                disabled={chamandoGarcom}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg shadow-xs transition-all active:scale-95 ml-2"
-                title="Chamar o garçom até a sua mesa"
-              >
-                <span>🛎️</span>
-                <span>{chamandoGarcom ? 'Chamando...' : 'Chamar Garçom'}</span>
-              </button>
-            )}
             {order?.createdAt && (
-              <span className="inline-flex items-center gap-1">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <span className="inline-flex items-center gap-1 bg-white/70 px-2.5 py-1 rounded-md border border-gray-200">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {formatTime(order.createdAt)}
@@ -228,6 +252,17 @@ export default function OrderTracking() {
             </div>
           )}
         </section>
+
+        {/* ─── Botão de Ação: Voltar ao Cardápio / Novo Pedido ─── */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={handleVoltarAoCardapio}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold text-sm rounded-xl shadow-md shadow-[#9C1C0E]/20 transition-all cursor-pointer"
+          >
+            <span>🍽️</span>
+            <span>Fazer Mais Pedidos no Cardápio</span>
+          </button>
+        </div>
 
         {/* ─── Rodapé / Atualização ──────────────────────────── */}
         <footer className="mt-8 text-center">

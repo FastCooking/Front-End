@@ -17,11 +17,11 @@ export default function OrderProgressBar({ status }) {
       {/* Etapas */}
       <div className="flex items-center justify-between relative">
         {/* Linha de fundo */}
-        <div className="absolute top-5 left-[10%] right-[10%] h-1 bg-gray-200 rounded-full z-0" />
+        <div className="absolute top-4 sm:top-5 left-[10%] right-[10%] h-1 bg-gray-200 rounded-full z-0" />
 
         {/* Linha de progresso ativa */}
         <div
-          className="absolute top-5 left-[10%] h-1 rounded-full z-[1] transition-all duration-700 ease-out"
+          className="absolute top-4 sm:top-5 left-[10%] h-1 rounded-full z-[1] transition-all duration-700 ease-out"
           style={{
             width: `${(activeIndex / (STATUS_PROGRESSION.length - 1)) * 80}%`,
             background: isCancelled
@@ -35,14 +35,14 @@ export default function OrderProgressBar({ status }) {
           const isCurrent = i === activeIndex && !isCancelled;
 
           return (
-            <div key={step} className="relative z-10 flex flex-col items-center flex-1">
+            <div key={step} className="relative z-10 flex flex-col items-center flex-1 px-0.5">
               {/* Dot/Círculo */}
               <div
                 className={`
-                  w-10 h-10 rounded-full flex items-center justify-center
+                  w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center
                   transition-all duration-500 shadow-sm
                   ${isCurrent
-                    ? 'bg-[#9C1C0E] text-white ring-4 ring-[#9C1C0E]/20 scale-110'
+                    ? 'bg-[#9C1C0E] text-white ring-4 ring-[#9C1C0E]/20 scale-105 sm:scale-110'
                     : isActive
                       ? 'bg-[#9C1C0E]/80 text-white'
                       : 'bg-gray-200 text-gray-400'
@@ -51,18 +51,18 @@ export default function OrderProgressBar({ status }) {
                 `}
               >
                 {isActive ? (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 ) : (
-                  <span className="text-xs font-bold">{i + 1}</span>
+                  <span className="text-[11px] sm:text-xs font-bold">{i + 1}</span>
                 )}
               </div>
 
               {/* Label */}
               <span
                 className={`
-                  mt-2.5 text-xs font-semibold text-center leading-tight
+                  mt-2 text-[10px] sm:text-xs font-semibold text-center leading-tight break-words
                   ${isCurrent ? 'text-[#9C1C0E]' : isActive ? 'text-gray-700' : 'text-gray-400'}
                 `}
               >

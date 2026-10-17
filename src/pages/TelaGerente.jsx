@@ -1140,7 +1140,6 @@ function TelaGerente() {
                               </div>
                               <div>
                                 <span className="font-bold text-gray-900 block">Mesa {m.numero}</span>
-                                <span className="text-[11px] text-gray-400 font-mono">ID: {m.idMesa.slice(0, 8)}...</span>
                               </div>
                             </div>
                           </td>

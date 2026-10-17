@@ -44,6 +44,20 @@ export async function obterRestaurantePorId(idRestaurante) {
   return resposta.json();
 }
 
+export async function obterRestaurantePublico(idRestaurante) {
+  const resposta = await fetch(`${API_URL}/${idRestaurante}/publico`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!resposta.ok) {
+    const erro = await resposta.json().catch(() => ({}));
+    throw new Error(erro.detail || 'Erro ao obter dados públicos do restaurante');
+  }
+
+  return resposta.json();
+}
+
 export async function criarRestaurante(dados) {
   const resposta = await fetch(API_URL, {
     method: 'POST',

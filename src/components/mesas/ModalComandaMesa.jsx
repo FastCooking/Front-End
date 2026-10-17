@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { MdReceiptLong, MdRestaurantMenu, MdClose, MdAccessTime, MdPerson } from "react-icons/md";
+import { MdReceiptLong, MdRestaurantMenu, MdClose, MdAccessTime, MdPerson, MdDelete } from "react-icons/md";
 import { obterPedidoAtivoMesa } from "../../services/mesaService";
+import { cancelarItemPedido } from "../../services/pedidoService";
 
 export default function ModalComandaMesa({ mesa, onClose }) {
   const [comanda, setComanda] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [processandoItem, setProcessandoItem] = useState(null);
 
   useEffect(() => {
     let ativo = true;
@@ -30,6 +32,33 @@ export default function ModalComandaMesa({ mesa, onClose }) {
       ativo = false;
     };
   }, [mesa]);
+
+  async function handleRemoverItem(item) {
+    const nomeItem = item.nomeItem || item.nome || "Item";
+    const confirmou = window.confirm(
+      `Deseja realmente remover o item "${nomeItem}" (Qtd: ${item.quantidade}) da Mesa #${mesa.numero}?`
+    );
+    if (!confirmou) return;
+
+    setProcessandoItem(item.idItemPedido);
+    try {
+      await cancelarItemPedido(item.idItemPedido);
+      setComanda((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          itens: (prev.itens || []).map((it) =>
+            it.idItemPedido === item.idItemPedido ? { ...it, status: "Cancelado" } : it
+          ),
+        };
+      });
+      alert(`Item "${nomeItem}" removido com sucesso.`);
+    } catch (err) {
+      alert(`Não foi possível remover o item: ${err.message}`);
+    } finally {
+      setProcessandoItem(null);
+    }
+  }
 
   const totalComanda = (comanda?.itens || []).reduce((acc, item) => {
     if (item.status === "Cancelado") return acc;
@@ -91,25 +120,39 @@ export default function ModalComandaMesa({ mesa, onClose }) {
                       <p className="text-[11px] text-gray-500 italic mt-0.5">Obs: {it.observacao}</p>
                     )}
                   </div>
-                  <div className="text-right flex flex-col items-end gap-1">
-                    <span className="font-bold text-gray-900">
-                      R$ {((Number(it.precoUnitario || it.preco || 0)) * (it.quantidade || 1)).toFixed(2)}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        it.status === "Pronto"
-                          ? "bg-green-100 text-green-800"
-                          : it.status === "Em preparo"
-                          ? "bg-amber-100 text-amber-800"
-                          : it.status === "Entregue"
-                          ? "bg-blue-100 text-blue-800"
-                          : it.status === "Cancelado"
-                          ? "bg-red-100 text-red-800 line-through"
-                          : "bg-gray-100 text-gray-700"
-                      }`}
-                    >
-                      {it.status}
-                    </span>
+                  <div className="text-right flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="font-bold text-gray-900">
+                        R$ {((Number(it.precoUnitario || it.preco || 0)) * (it.quantidade || 1)).toFixed(2)}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          it.status === "Pronto"
+                            ? "bg-green-100 text-green-800"
+                            : it.status === "Em preparo"
+                            ? "bg-amber-100 text-amber-800"
+                            : it.status === "Entregue"
+                            ? "bg-blue-100 text-blue-800"
+                            : it.status === "Cancelado"
+                            ? "bg-red-100 text-red-800 line-through"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {it.status}
+                      </span>
+                    </div>
+
+                    {it.status !== "Cancelado" && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoverItem(it)}
+                        disabled={processandoItem === it.idItemPedido}
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                        title="Remover item deste pedido"
+                      >
+                        <MdDelete size={17} />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}

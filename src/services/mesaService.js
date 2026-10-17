@@ -67,7 +67,8 @@ export async function excluirMesa(idMesa) {
 }
 
 export async function obterQrCodeMesaUrl(idMesa) {
-  const resposta = await fetch(`${API_URL}/${idMesa}/qrcode`, {
+  const origin = window.location.origin;
+  const resposta = await fetch(`${API_URL}/${idMesa}/qrcode?origin=${encodeURIComponent(origin)}`, {
     headers: getAuthHeaders(),
   });
 

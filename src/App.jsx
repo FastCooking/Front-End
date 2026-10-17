@@ -20,6 +20,8 @@ function App(){
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<TelaLogin />} />
         <Route path="/cardapio" element={<TelaAutoatendimento />} />
+        <Route path="/autoatendimento" element={<TelaAutoatendimento />} />
+        <Route path="/autoatendimento/mesa/:idMesa" element={<TelaAutoatendimento />} />
         <Route path="/insumo" element={<TelaInsumo />} />
         <Route path="/garcom" element={<TelaGarcom />} />
         <Route path="/cozinha" element={<TelaCozinha />} />
