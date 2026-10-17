@@ -20,6 +20,9 @@ import {
   MdShoppingBag,
   MdHistory,
   MdWarning,
+  MdQrCode2,
+  MdReceiptLong,
+  MdLaunch,
 } from "react-icons/md";
 
 import {
@@ -35,12 +38,20 @@ import {
   excluirItemCardapio,
 } from "../services/cardapioService";
 import { buscarInsumos, excluirInsumo } from "../services/insumosService";
+import {
+  listarMesas,
+  atualizarMesa,
+  excluirMesa,
+} from "../services/mesaService";
 
 import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
 import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
 import ModalResetarSenha from "../components/administrador/ModalResetarSenha";
 import ModalCardapio from "../components/cardapio/ModalCardapio";
 import ModalEstoque from "../components/insumos/ModalEstoque";
+import ModalMesa from "../components/mesas/ModalMesa";
+import ModalQrCodeMesa from "../components/mesas/ModalQrCodeMesa";
+import ModalComandaMesa from "../components/mesas/ModalComandaMesa";
 
 import FormularioFichaTec from "../components/insumos/FormularioFichaTec";
 
@@ -99,6 +110,16 @@ function TelaGerente() {
   const [buscaEstoque, setBuscaEstoque] = useState("");
   const [modalEstoque, setModalEstoque] = useState(false);
   const [itemEstoqueEdicao, setItemEstoqueEdicao] = useState(null);
+
+  // Estados de Dados Mesas
+  const [mesas, setMesas] = useState([]);
+  const [carregandoMesas, setCarregandoMesas] = useState(false);
+  const [filtroStatusMesa, setFiltroStatusMesa] = useState("");
+  const [buscaMesa, setBuscaMesa] = useState("");
+  const [modalMesa, setModalMesa] = useState(false);
+  const [mesaEdicao, setMesaEdicao] = useState(null);
+  const [mesaQrCode, setMesaQrCode] = useState(null);
+  const [mesaComanda, setMesaComanda] = useState(null);
 
   // Cargos permitidos para o Gerente criar/editar (estritamente inferiores a Gerente)
   const CARGOS_PERMITIDOS_GERENTE = ["Garcom", "Cozinheiro"];
@@ -243,6 +264,47 @@ function TelaGerente() {
     };
   }, [abaAtiva, carregarEstoque]);
 
+  // 5. Carregar Mesas
+  const carregarMesas = useCallback(async () => {
+    if (!idRestauranteGerente) return;
+    try {
+      setCarregandoMesas(true);
+      const dados = await listarMesas(idRestauranteGerente);
+      setMesas(dados || []);
+    } catch (err) {
+      console.error("Erro ao carregar mesas:", err);
+    } finally {
+      setCarregandoMesas(false);
+    }
+  }, [idRestauranteGerente]);
+
+  useEffect(() => {
+    let ativo = true;
+    if (abaAtiva === "mesas") {
+      Promise.resolve().then(() => {
+        if (ativo) carregarMesas();
+      });
+    }
+    return () => {
+      ativo = false;
+    };
+  }, [abaAtiva, carregarMesas]);
+
+  async function handleExcluirMesa(m) {
+    const confirmou = window.confirm(
+      `Deseja realmente remover a Mesa #${m.numero}? Esta ação não pode ser desfeita.`
+    );
+    if (!confirmou) return;
+
+    try {
+      await excluirMesa(m.idMesa);
+      dispararSucesso(`Mesa #${m.numero} removida com sucesso!`);
+      carregarMesas();
+    } catch (err) {
+      alert(err.message || "Erro ao remover mesa.");
+    }
+  }
+
   function dispararSucesso(msg) {
     setMensagemSucesso(msg);
     setTimeout(() => setMensagemSucesso(""), 4000);
@@ -360,6 +422,20 @@ function TelaGerente() {
     if (buscaEstoque.trim()) {
       const termo = buscaEstoque.toLowerCase().trim();
       return item.nome?.toLowerCase().includes(termo);
+    }
+    return true;
+  });
+
+  // Filtros de exibição das mesas
+  const mesasFiltradas = mesas.filter((m) => {
+    if (buscaMesa.trim()) {
+      const termo = buscaMesa.toLowerCase().trim();
+      const bateNumero = String(m.numero).includes(termo);
+      const bateStatus = m.status?.toLowerCase().includes(termo);
+      if (!bateNumero && !bateStatus) return false;
+    }
+    if (filtroStatusMesa && m.status !== filtroStatusMesa) {
+      return false;
     }
     return true;
   });
@@ -545,7 +621,17 @@ function TelaGerente() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {usuarios.map((u) => {
+                    {carregandoUsuarios ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-10 text-gray-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs">Carregando usuários do restaurante...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      usuarios.map((u) => {
                       const isHighRole = u.funcao === "Gerente" || u.funcao === "Adm" || u.funcao === "gerente" || u.funcao === "adm";
 
                       return (
@@ -621,7 +707,7 @@ function TelaGerente() {
                           </td>
                         </tr>
                       );
-                    })}
+                    }))}
 
                     {usuarios.length === 0 && !carregandoUsuarios && (
                       <tr>
@@ -672,16 +758,29 @@ function TelaGerente() {
                 )}
               </div>
 
-              <button
-                onClick={() => {
-                  setItemCardapioEdicao(null);
-                  setModalCardapio(true);
-                }}
-                className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all shrink-0"
-              >
-                <MdAdd size={20} />
-                Novo Item do Cardápio
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={`/cardapio?idRestaurante=${idRestauranteGerente || ""}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-center gap-1.5 bg-white border border-[#B78A10] text-[#9C1C0E] hover:bg-[#F9ECE5] px-4 py-2.5 rounded-xl font-medium text-sm shadow-xs transition-all cursor-pointer shrink-0"
+                  title="Visualizar cardápio como cliente / autoatendimento"
+                >
+                  <MdLaunch size={18} />
+                  <span>Acessar Cardápio</span>
+                </a>
+
+                <button
+                  onClick={() => {
+                    setItemCardapioEdicao(null);
+                    setModalCardapio(true);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all shrink-0"
+                >
+                  <MdAdd size={20} />
+                  Novo Item do Cardápio
+                </button>
+              </div>
             </div>
 
             <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
@@ -697,7 +796,17 @@ function TelaGerente() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {itensCardapioFiltrados.map((item) => {
+                    {carregandoCardapio ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-gray-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs">Carregando itens do cardápio...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      itensCardapioFiltrados.map((item) => {
                       const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
                       const imgUrl = item.pathImage || item.imagemUrl || item.imagem_url;
                       const fullImgUrl = imgUrl ? (imgUrl.startsWith("http") ? imgUrl : `${API_BASE}${imgUrl}`) : null;
@@ -778,7 +887,7 @@ function TelaGerente() {
                         </td>
                       </tr>
                       );
-                    })}
+                    }))}
 
                     {itensCardapioFiltrados.length === 0 && !carregandoCardapio && (
                       <tr>
@@ -863,7 +972,17 @@ function TelaGerente() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {itensEstoqueFiltrados.map((insumo, index) => {
+                        {carregandoEstoque ? (
+                          <tr>
+                            <td colSpan={5} className="text-center py-10 text-gray-500">
+                              <div className="flex flex-col items-center justify-center gap-2">
+                                <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                                <span className="text-xs">Carregando itens de estoque...</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          itensEstoqueFiltrados.map((insumo, index) => {
                           const estoqueBaixo = Number(insumo.quantidadeEmEstoque) <= Number(insumo.quantidadeMinima);
 
                           return (
@@ -912,7 +1031,7 @@ function TelaGerente() {
                               </td>
                             </tr>
                           );
-                        })}
+                        }))}
 
                         {itensEstoqueFiltrados.length === 0 && !carregandoEstoque && (
                           <tr>
@@ -939,8 +1058,162 @@ function TelaGerente() {
           </div>
         )}
 
-        {/* ================= ABAS MOCK (MESAS, COZINHA, PEDIDOS, HISTÓRICO) ================= */}
-        {(abaAtiva === "mesas" || abaAtiva === "cozinha" || abaAtiva === "pedidos" || abaAtiva === "historico") && (
+        {/* ================= ABA MESAS (MÓDULO TOTALMENTE FUNCIONAL) ================= */}
+        {abaAtiva === "mesas" && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                <div className="relative flex-1 min-w-[200px]">
+                  <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Buscar mesa por número ou status..."
+                    value={buscaMesa}
+                    onChange={(e) => setBuscaMesa(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 bg-white/70 border border-gray-200 rounded-xl px-3 py-1.5">
+                  <MdFilterList className="text-gray-400" size={16} />
+                  <select
+                    value={filtroStatusMesa}
+                    onChange={(e) => setFiltroStatusMesa(e.target.value)}
+                    className="bg-transparent text-xs text-gray-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="">Todos os Status</option>
+                    <option value="Disponivel">Disponível</option>
+                    <option value="Ocupada">Ocupada</option>
+                    <option value="Reservada">Reservada</option>
+                    <option value="Manutencao">Manutenção</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setMesaEdicao(null);
+                  setModalMesa(true);
+                }}
+                className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all shrink-0"
+              >
+                <MdAdd size={20} />
+                Nova Mesa
+              </button>
+            </div>
+
+            <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-gray-700">
+                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
+                    <tr>
+                      <th className="px-6 py-3 font-semibold">Mesa</th>
+                      <th className="px-6 py-3 font-semibold">Status</th>
+                      <th className="px-6 py-3 font-semibold">Autoatendimento (QR Code)</th>
+                      <th className="px-6 py-3 font-semibold">Consumo / Comanda</th>
+                      <th className="px-6 py-3 font-semibold text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {carregandoMesas ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-gray-500">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs">Carregando mesas do restaurante...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      mesasFiltradas.map((m) => (
+                        <tr key={m.idMesa} className="hover:bg-white/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-[#B78A10]/15 text-[#9C1C0E] flex items-center justify-center font-bold text-base shadow-xs">
+                                #{m.numero}
+                              </div>
+                              <div>
+                                <span className="font-bold text-gray-900 block">Mesa {m.numero}</span>
+                                <span className="text-[11px] text-gray-400 font-mono">ID: {m.idMesa.slice(0, 8)}...</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-semibold inline-block ${
+                                m.status === "Disponivel"
+                                  ? "bg-green-100 text-green-800"
+                                  : m.status === "Ocupada"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : m.status === "Reservada"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {m.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => setMesaQrCode(m)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#B78A10]/40 text-[#9C1C0E] hover:bg-[#F9ECE5] rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                              title="Visualizar e imprimir QR Code da mesa"
+                            >
+                              <MdQrCode2 size={18} />
+                              <span>Ver QR Code</span>
+                            </button>
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => setMesaComanda(m)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                              title="Visualizar itens e consumo ativo da mesa"
+                            >
+                              <MdReceiptLong size={18} />
+                              <span>Ver Comanda</span>
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setMesaEdicao(m);
+                                  setModalMesa(true);
+                                }}
+                                className="p-1.5 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                                title="Editar Mesa"
+                              >
+                                <MdEdit size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleExcluirMesa(m)}
+                                className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                title="Remover Mesa"
+                              >
+                                <MdDelete size={18} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+
+                    {mesasFiltradas.length === 0 && !carregandoMesas && (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-gray-500 text-xs">
+                          Nenhuma mesa encontrada. Cadastre mesas no botão acima para disponibilizar o atendimento.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================= ABAS MOCK (COZINHA, PEDIDOS, HISTÓRICO) ================= */}
+        {(abaAtiva === "cozinha" || abaAtiva === "pedidos" || abaAtiva === "historico") && (
           <div className="bg-white/80 backdrop-blur-xs p-12 rounded-2xl shadow-md border border-gray-200 text-center">
             <h2 className="text-xl font-bold text-[#9C1C0E] mb-2 capitalize">
               Módulo de {abaAtiva}
@@ -1025,6 +1298,38 @@ function TelaGerente() {
             dispararSucesso("Item de estoque salvo com sucesso!");
             carregarEstoque();
           }}
+        />
+      )}
+
+      {/* Modais de Mesas */}
+      {modalMesa && (
+        <ModalMesa
+          mesa={mesaEdicao}
+          idRestaurante={idRestauranteGerente}
+          onClose={() => {
+            setModalMesa(false);
+            setMesaEdicao(null);
+          }}
+          onSuccess={() => {
+            setModalMesa(false);
+            setMesaEdicao(null);
+            dispararSucesso(mesaEdicao ? "Mesa atualizada com sucesso!" : "Mesa criada com sucesso!");
+            carregarMesas();
+          }}
+        />
+      )}
+
+      {mesaQrCode && (
+        <ModalQrCodeMesa
+          mesa={mesaQrCode}
+          onClose={() => setMesaQrCode(null)}
+        />
+      )}
+
+      {mesaComanda && (
+        <ModalComandaMesa
+          mesa={mesaComanda}
+          onClose={() => setMesaComanda(null)}
         />
       )}
     </div>
