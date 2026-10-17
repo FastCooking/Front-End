@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MdPeople,
@@ -32,6 +32,12 @@ import {
   MdInfoOutline,
   MdCreditCard,
   MdClose,
+  MdArrowUpward,
+  MdArrowDownward,
+  MdSort,
+  MdCalendarToday,
+  MdChevronLeft,
+  MdChevronRight,
 } from "react-icons/md";
 
 import {
@@ -136,17 +142,19 @@ function TelaGerente() {
   const [carregandoKds, setCarregandoKds] = useState(false);
   const [filtroStatusKds, setFiltroStatusKds] = useState("Todos");
 
-  // Estados de Dados Pedidos Ativos
-  const [pedidosAtivos, setPedidosAtivos] = useState([]);
-  const [carregandoPedidos, setCarregandoPedidos] = useState(false);
-  const [buscaPedido, setBuscaPedido] = useState("");
-  const [filtroStatusPedido, setFiltroStatusPedido] = useState("Todos");
-
-  // Estados de Dados Histórico de Pedidos
+  // Estados de Dados Histórico de Pedidos e Vendas
   const [historicoPedidos, setHistoricoPedidos] = useState([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   const [buscaHistorico, setBuscaHistorico] = useState("");
   const [filtroStatusHistorico, setFiltroStatusHistorico] = useState("Todos");
+  const [filtroPeriodoHistorico, setFiltroPeriodoHistorico] = useState("todos");
+  const [dataInicioHistorico, setDataInicioHistorico] = useState("");
+  const [dataFimHistorico, setDataFimHistorico] = useState("");
+  const [filtroPagamentoHistorico, setFiltroPagamentoHistorico] = useState("Todos");
+  const [ordenacaoColuna, setOrdenacaoColuna] = useState("data"); // 'data', 'total', 'mesa'
+  const [ordenacaoDirecao, setOrdenacaoDirecao] = useState("desc"); // 'asc', 'desc'
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+  const [paginaAtual, setPaginaAtual] = useState(1);
   const [detalhesHistoricoModal, setDetalhesHistoricoModal] = useState(null);
 
   // Cargos permitidos para o Gerente criar/editar (estritamente inferiores a Gerente)
@@ -351,33 +359,6 @@ function TelaGerente() {
     }
   }, [abaAtiva, carregarKds]);
 
-  // 7. Carregar Pedidos Ativos
-  const carregarPedidos = useCallback(async () => {
-    if (!idRestauranteGerente) return;
-    try {
-      setCarregandoPedidos(true);
-      const dados = await listarPedidos({ idRestaurante: idRestauranteGerente, tipo: "ativos" });
-      setPedidosAtivos(dados || []);
-    } catch (err) {
-      console.warn("Erro ao carregar pedidos ativos:", err);
-    } finally {
-      setCarregandoPedidos(false);
-    }
-  }, [idRestauranteGerente]);
-
-  useEffect(() => {
-    let ativo = true;
-    if (abaAtiva === "pedidos") {
-      carregarPedidos();
-      const intervalId = setInterval(() => {
-        if (ativo) carregarPedidos();
-      }, 10000);
-      return () => {
-        ativo = false;
-        clearInterval(intervalId);
-      };
-    }
-  }, [abaAtiva, carregarPedidos]);
 
   // 8. Carregar Histórico de Pedidos
   const carregarHistorico = useCallback(async () => {
@@ -561,37 +542,122 @@ function TelaGerente() {
     return true;
   });
 
-  // Filtros de exibição dos pedidos ativos
-  const pedidosFiltrados = pedidosAtivos.filter((p) => {
-    if (buscaPedido.trim()) {
-      const termo = buscaPedido.toLowerCase().trim();
-      const bateMesa = String(p.numeroMesa).includes(termo);
-      const bateId = String(p.idPedido).toLowerCase().includes(termo);
-      const bateGarcom = p.nomeGarcom?.toLowerCase().includes(termo);
-      if (!bateMesa && !bateId && !bateGarcom) return false;
-    }
-    if (filtroStatusPedido !== "Todos" && p.status !== filtroStatusPedido) {
-      return false;
-    }
-    return true;
-  });
+  // Filtros avançados, Range de datas e Ordenação do histórico
+  const historicoFiltrado = useMemo(() => {
+    let lista = [...historicoPedidos];
 
-  // Filtros de exibição do histórico de pedidos
-  const historicoFiltrado = historicoPedidos.filter((h) => {
+    // 1. Busca por termo
     if (buscaHistorico.trim()) {
       const termo = buscaHistorico.toLowerCase().trim();
-      const bateMesa = String(h.numeroMesa).includes(termo);
-      const bateId = String(h.idPedido).toLowerCase().includes(termo);
-      if (!bateMesa && !bateId) return false;
+      lista = lista.filter((h) => {
+        const bateMesa = String(h.numeroMesa).includes(termo);
+        const bateId = String(h.idPedido).toLowerCase().includes(termo);
+        return bateMesa || bateId;
+      });
     }
-    if (filtroStatusHistorico !== "Todos" && h.status !== filtroStatusHistorico) {
-      return false;
-    }
-    return true;
-  });
 
-  const pedidosFechados = historicoPedidos.filter((h) => h.status === "Fechado");
-  const pedidosCancelados = historicoPedidos.filter((h) => h.status === "Cancelado");
+    // 2. Filtro de Status
+    if (filtroStatusHistorico !== "Todos") {
+      lista = lista.filter((h) => h.status === filtroStatusHistorico);
+    }
+
+    // 3. Filtro de Forma de Pagamento
+    if (filtroPagamentoHistorico !== "Todos") {
+      lista = lista.filter((h) => {
+        const forma = h.pagamentos?.[0]?.formaPagamento || "";
+        return forma.toLowerCase().includes(filtroPagamentoHistorico.toLowerCase());
+      });
+    }
+
+    // 4. Filtro por Período / Range de Datas
+    const agora = new Date();
+    if (filtroPeriodoHistorico === "hoje") {
+      const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+      lista = lista.filter((h) => h.dataAbertura && new Date(h.dataAbertura) >= inicioHoje);
+    } else if (filtroPeriodoHistorico === "7dias") {
+      const seteDiasAtras = new Date(agora.getTime() - 7 * 24 * 60 * 60 * 1000);
+      lista = lista.filter((h) => h.dataAbertura && new Date(h.dataAbertura) >= seteDiasAtras);
+    } else if (filtroPeriodoHistorico === "30dias") {
+      const trintaDiasAtras = new Date(agora.getTime() - 30 * 24 * 60 * 60 * 1000);
+      lista = lista.filter((h) => h.dataAbertura && new Date(h.dataAbertura) >= trintaDiasAtras);
+    } else if (filtroPeriodoHistorico === "custom") {
+      if (dataInicioHistorico) {
+        const dIni = new Date(dataInicioHistorico + "T00:00:00");
+        lista = lista.filter((h) => h.dataAbertura && new Date(h.dataAbertura) >= dIni);
+      }
+      if (dataFimHistorico) {
+        const dFim = new Date(dataFimHistorico + "T23:59:59");
+        lista = lista.filter((h) => h.dataAbertura && new Date(h.dataAbertura) <= dFim);
+      }
+    }
+
+    // 5. Ordenação dos itens
+    lista.sort((a, b) => {
+      let valA, valB;
+      if (ordenacaoColuna === "data") {
+        valA = new Date(a.dataAbertura || 0).getTime();
+        valB = new Date(b.dataAbertura || 0).getTime();
+      } else if (ordenacaoColuna === "total") {
+        valA = Number(a.total) || 0;
+        valB = Number(b.total) || 0;
+      } else if (ordenacaoColuna === "mesa") {
+        valA = Number(a.numeroMesa) || 0;
+        valB = Number(b.numeroMesa) || 0;
+      }
+
+      if (valA < valB) return ordenacaoDirecao === "asc" ? -1 : 1;
+      if (valA > valB) return ordenacaoDirecao === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return lista;
+  }, [
+    historicoPedidos,
+    buscaHistorico,
+    filtroStatusHistorico,
+    filtroPagamentoHistorico,
+    filtroPeriodoHistorico,
+    dataInicioHistorico,
+    dataFimHistorico,
+    ordenacaoColuna,
+    ordenacaoDirecao,
+  ]);
+
+  // Paginação / Range de Amostragem
+  const totalHistoricoItens = historicoFiltrado.length;
+  const historicoPaginado = useMemo(() => {
+    if (itensPorPagina === "Todos") return historicoFiltrado;
+    const qtd = Number(itensPorPagina) || 10;
+    const inicio = (paginaAtual - 1) * qtd;
+    return historicoFiltrado.slice(inicio, inicio + qtd);
+  }, [historicoFiltrado, itensPorPagina, paginaAtual]);
+
+  const totalPaginasHistorico =
+    itensPorPagina === "Todos" ? 1 : Math.ceil(totalHistoricoItens / (Number(itensPorPagina) || 10)) || 1;
+
+  useEffect(() => {
+    setPaginaAtual(1);
+  }, [
+    buscaHistorico,
+    filtroStatusHistorico,
+    filtroPagamentoHistorico,
+    filtroPeriodoHistorico,
+    dataInicioHistorico,
+    dataFimHistorico,
+    itensPorPagina,
+  ]);
+
+  const alternarOrdenacao = (coluna) => {
+    if (ordenacaoColuna === coluna) {
+      setOrdenacaoDirecao((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setOrdenacaoColuna(coluna);
+      setOrdenacaoDirecao(coluna === "mesa" ? "asc" : "desc");
+    }
+  };
+
+  const pedidosFechados = historicoFiltrado.filter((h) => h.status === "Fechado");
+  const pedidosCancelados = historicoFiltrado.filter((h) => h.status === "Cancelado");
   const totalFaturado = pedidosFechados.reduce((acc, h) => acc + (Number(h.total) || 0), 0);
   const ticketMedio = pedidosFechados.length > 0 ? totalFaturado / pedidosFechados.length : 0;
 
@@ -701,17 +767,6 @@ function TelaGerente() {
             Cozinha
           </button>
 
-          <button
-            onClick={() => setAbaAtiva("pedidos")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition-all cursor-pointer ${
-              abaAtiva === "pedidos"
-                ? "bg-[#9C1C0E] text-white shadow-md"
-                : "bg-white/60 text-gray-700 hover:bg-white"
-            }`}
-          >
-            <MdShoppingBag size={18} />
-            Pedidos
-          </button>
 
           <button
             onClick={() => setAbaAtiva("historico")}
@@ -1513,163 +1568,6 @@ function TelaGerente() {
           </div>
         )}
 
-        {/* ================= ABA PEDIDOS (PEDIDOS ATIVOS NO RESTAURANTE) ================= */}
-        {abaAtiva === "pedidos" && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
-              <div className="flex flex-wrap items-center gap-3 flex-1">
-                <div className="relative flex-1 min-w-[200px]">
-                  <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="text"
-                    placeholder="Buscar por mesa, código ou garçom..."
-                    value={buscaPedido}
-                    onChange={(e) => setBuscaPedido(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
-                  />
-                </div>
-
-                <select
-                  value={filtroStatusPedido}
-                  onChange={(e) => setFiltroStatusPedido(e.target.value)}
-                  className="bg-white/70 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
-                >
-                  <option value="Todos">Todos os Status ({pedidosAtivos.length})</option>
-                  <option value="Aberto">Aberto</option>
-                  <option value="Em preparo">Em preparo</option>
-                  <option value="Pronto">Pronto</option>
-                </select>
-              </div>
-
-              <button
-                onClick={carregarPedidos}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
-              >
-                <MdRefresh className={carregandoPedidos ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
-                <span>Atualizar Pedidos</span>
-              </button>
-            </div>
-
-            <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-gray-700">
-                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 font-semibold">Mesa</th>
-                      <th className="px-6 py-3 font-semibold">Horário</th>
-                      <th className="px-6 py-3 font-semibold">Itens do Pedido</th>
-                      <th className="px-6 py-3 font-semibold">Total</th>
-                      <th className="px-6 py-3 font-semibold">Status</th>
-                      <th className="px-6 py-3 font-semibold text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {carregandoPedidos ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-10 text-gray-500">
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
-                            <span className="text-xs">Carregando pedidos ativos...</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : pedidosFiltrados.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-12 text-gray-500 text-xs">
-                          Nenhum pedido ativo encontrado no restaurante no momento.
-                        </td>
-                      </tr>
-                    ) : (
-                      pedidosFiltrados.map((p) => (
-                        <tr key={p.idPedido} className="hover:bg-white/50 transition-colors">
-                          <td className="px-6 py-4 font-bold text-gray-900">
-                            <span className="inline-flex items-center gap-1 bg-[#9C1C0E]/10 text-[#9C1C0E] px-2.5 py-1 rounded-lg">
-                              <MdTableBar size={16} /> Mesa #{p.numeroMesa || "--"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-gray-500">
-                            {p.dataAbertura
-                              ? new Date(p.dataAbertura).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                              : "--:--"}
-                          </td>
-                          <td className="px-6 py-4 text-xs">
-                            <div className="space-y-1 max-w-xs">
-                              {p.itens?.map((it, idx) => (
-                                <div key={idx} className="flex items-center justify-between gap-2">
-                                  <span className="truncate">
-                                    {it.quantidade}x {it.nome}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                      it.status === "Pronto"
-                                        ? "bg-green-100 text-green-700"
-                                        : it.status === "Em preparo"
-                                        ? "bg-amber-100 text-amber-700"
-                                        : it.status === "Cancelado"
-                                        ? "bg-red-100 text-red-700 line-through"
-                                        : "bg-gray-100 text-gray-600"
-                                    }`}
-                                  >
-                                    {it.status}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 font-bold text-gray-900 text-xs">
-                            R$ {Number(p.total || 0).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                p.status === "Pronto"
-                                  ? "bg-green-100 text-green-800"
-                                  : p.status === "Em preparo"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-blue-100 text-blue-800"
-                              }`}
-                            >
-                              {p.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => window.open(`/tracking/${p.idPedido}`, "_blank")}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer"
-                                title="Acompanhar status na tela de tracking em tempo real"
-                              >
-                                <MdTimeline size={16} />
-                                <span>Tracking</span>
-                                <MdLaunch size={12} />
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  const mesaObj = mesas.find((m) => String(m.idMesa) === String(p.idMesa)) || {
-                                    idMesa: p.idMesa,
-                                    numero: p.numeroMesa,
-                                  };
-                                  setMesaComanda(mesaObj);
-                                }}
-                                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-semibold rounded-xl transition-all cursor-pointer"
-                                title="Ver comanda completa e gerenciar itens"
-                              >
-                                <MdReceiptLong size={16} />
-                                <span>Comanda</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ================= ABA HISTÓRICO (VENDAS E PEDIDOS ENCERRADOS) ================= */}
         {abaAtiva === "historico" && (
           <div className="space-y-6">
@@ -1716,50 +1614,165 @@ function TelaGerente() {
               </div>
             </div>
 
-            {/* Filtros Histórico */}
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4">
-              <div className="flex flex-wrap items-center gap-3 flex-1">
-                <div className="relative flex-1 min-w-[200px]">
+            {/* Filtros Avançados Histórico */}
+            <div className="bg-white/80 backdrop-blur-xs p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Busca rápida */}
+                <div className="relative flex-1 min-w-[220px]">
                   <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
                   <input
                     type="text"
                     placeholder="Buscar por mesa ou código no histórico..."
                     value={buscaHistorico}
                     onChange={(e) => setBuscaHistorico(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
+                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
                   />
                 </div>
 
-                <select
-                  value={filtroStatusHistorico}
-                  onChange={(e) => setFiltroStatusHistorico(e.target.value)}
-                  className="bg-white/70 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
-                >
-                  <option value="Todos">Todos os Status ({historicoPedidos.length})</option>
-                  <option value="Fechado">Fechados ({pedidosFechados.length})</option>
-                  <option value="Cancelado">Cancelados ({pedidosCancelados.length})</option>
-                </select>
+                {/* Filtros Dropdown */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={filtroStatusHistorico}
+                    onChange={(e) => setFiltroStatusHistorico(e.target.value)}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="Todos">Todos os Status ({historicoPedidos.length})</option>
+                    <option value="Fechado">Fechados ({pedidosFechados.length})</option>
+                    <option value="Cancelado">Cancelados ({pedidosCancelados.length})</option>
+                  </select>
+
+                  <select
+                    value={filtroPagamentoHistorico}
+                    onChange={(e) => setFiltroPagamentoHistorico(e.target.value)}
+                    className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="Todos">Todas as Formas de Pagamento</option>
+                    <option value="Cartão de Crédito">Cartão de Crédito</option>
+                    <option value="Cartão de Débito">Cartão de Débito</option>
+                    <option value="PIX">PIX</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                  </select>
+
+                  <button
+                    onClick={carregarHistorico}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
+                    title="Recarregar histórico"
+                  >
+                    <MdRefresh className={carregandoHistorico ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
+                    <span className="hidden sm:inline">Atualizar</span>
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={carregarHistorico}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:text-[#9C1C0E] hover:border-[#9C1C0E] text-xs font-semibold shadow-xs transition-all cursor-pointer shrink-0"
-              >
-                <MdRefresh className={carregandoHistorico ? "animate-spin text-[#9C1C0E]" : ""} size={18} />
-                <span>Atualizar Histórico</span>
-              </button>
+              {/* Linha de Range de Datas / Período e Amostragem */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium text-gray-500 flex items-center gap-1">
+                    <MdCalendarToday size={14} className="text-[#9C1C0E]" /> Período:
+                  </span>
+                  {[
+                    { id: "todos", label: "Todos" },
+                    { id: "hoje", label: "Hoje" },
+                    { id: "7dias", label: "Últimos 7 dias" },
+                    { id: "30dias", label: "Últimos 30 dias" },
+                    { id: "custom", label: "Personalizado" },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setFiltroPeriodoHistorico(p.id)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                        filtroPeriodoHistorico === p.id
+                          ? "bg-[#9C1C0E] text-white shadow-xs"
+                          : "bg-gray-100 hover:bg-gray-200 text-gray-700"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+
+                  {filtroPeriodoHistorico === "custom" && (
+                    <div className="flex items-center gap-1.5 ml-2">
+                      <input
+                        type="date"
+                        value={dataInicioHistorico}
+                        onChange={(e) => setDataInicioHistorico(e.target.value)}
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 focus:outline-none focus:border-[#9C1C0E]"
+                      />
+                      <span className="text-xs text-gray-400">até</span>
+                      <input
+                        type="date"
+                        value={dataFimHistorico}
+                        onChange={(e) => setDataFimHistorico(e.target.value)}
+                        className="bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 focus:outline-none focus:border-[#9C1C0E]"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Seletor de Amostragem / Itens por página */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Exibir por página:</span>
+                  <select
+                    value={itensPorPagina}
+                    onChange={(e) => setItensPorPagina(e.target.value === "Todos" ? "Todos" : Number(e.target.value))}
+                    className="bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs text-gray-700 focus:outline-none cursor-pointer font-medium"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value="Todos">Todos</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Tabela do Histórico */}
             <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-gray-700">
-                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
+                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200 select-none">
                     <tr>
-                      <th className="px-6 py-3 font-semibold">Data / Horário</th>
-                      <th className="px-6 py-3 font-semibold">Mesa</th>
+                      <th
+                        onClick={() => alternarOrdenacao("data")}
+                        className="px-6 py-3 font-semibold cursor-pointer hover:bg-[#ebd5cb] transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Data / Horário</span>
+                          {ordenacaoColuna === "data" ? (
+                            ordenacaoDirecao === "asc" ? <MdArrowUpward size={14} /> : <MdArrowDownward size={14} />
+                          ) : (
+                            <MdSort size={14} className="opacity-40" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => alternarOrdenacao("mesa")}
+                        className="px-6 py-3 font-semibold cursor-pointer hover:bg-[#ebd5cb] transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Mesa</span>
+                          {ordenacaoColuna === "mesa" ? (
+                            ordenacaoDirecao === "asc" ? <MdArrowUpward size={14} /> : <MdArrowDownward size={14} />
+                          ) : (
+                            <MdSort size={14} className="opacity-40" />
+                          )}
+                        </div>
+                      </th>
                       <th className="px-6 py-3 font-semibold">Pagamento</th>
-                      <th className="px-6 py-3 font-semibold">Total</th>
+                      <th
+                        onClick={() => alternarOrdenacao("total")}
+                        className="px-6 py-3 font-semibold cursor-pointer hover:bg-[#ebd5cb] transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Total</span>
+                          {ordenacaoColuna === "total" ? (
+                            ordenacaoDirecao === "asc" ? <MdArrowUpward size={14} /> : <MdArrowDownward size={14} />
+                          ) : (
+                            <MdSort size={14} className="opacity-40" />
+                          )}
+                        </div>
+                      </th>
                       <th className="px-6 py-3 font-semibold">Status</th>
                       <th className="px-6 py-3 font-semibold text-right">Detalhes</th>
                     </tr>
@@ -1774,14 +1787,14 @@ function TelaGerente() {
                           </div>
                         </td>
                       </tr>
-                    ) : historicoFiltrado.length === 0 ? (
+                    ) : historicoPaginado.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="text-center py-12 text-gray-500 text-xs">
-                          Nenhum pedido finalizado no histórico até o momento.
+                          Nenhum pedido encontrado para os filtros selecionados.
                         </td>
                       </tr>
                     ) : (
-                      historicoFiltrado.map((h) => {
+                      historicoPaginado.map((h) => {
                         const formaPag = h.pagamentos?.[0]?.formaPagamento || "Não informado";
                         return (
                           <tr key={h.idPedido} className="hover:bg-white/50 transition-colors">
@@ -1791,11 +1804,11 @@ function TelaGerente() {
                               </div>
                               <div className="text-[11px] text-gray-400">
                                 {h.dataAbertura
-                                  ? new Date(h.dataAbertura).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                                  : "--:--"}
+                                   ? new Date(h.dataAbertura).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                                   : "--:--"}
                                 {h.dataFechamento
-                                  ? ` → ${new Date(h.dataFechamento).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                                  : ""}
+                                   ? ` → ${new Date(h.dataFechamento).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                   : ""}
                               </div>
                             </td>
                             <td className="px-6 py-4 font-bold text-gray-900">
@@ -1834,6 +1847,66 @@ function TelaGerente() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Paginação do Histórico */}
+              {itensPorPagina !== "Todos" && totalPaginasHistorico > 1 && (
+                <div className="px-6 py-4 bg-white/50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-600">
+                  <div>
+                    Exibindo{" "}
+                    <span className="font-semibold text-gray-900">
+                      {Math.min((paginaAtual - 1) * Number(itensPorPagina) + 1, totalHistoricoItens)}
+                    </span>{" "}
+                    a{" "}
+                    <span className="font-semibold text-gray-900">
+                      {Math.min(paginaAtual * Number(itensPorPagina), totalHistoricoItens)}
+                    </span>{" "}
+                    de <span className="font-semibold text-gray-900">{totalHistoricoItens}</span> pedidos
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPaginaAtual((p) => Math.max(1, p - 1))}
+                      disabled={paginaAtual === 1}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      title="Página Anterior"
+                    >
+                      <MdChevronLeft size={18} />
+                    </button>
+
+                    {Array.from({ length: totalPaginasHistorico }, (_, i) => i + 1)
+                      .filter((p) => {
+                        return p === 1 || p === totalPaginasHistorico || Math.abs(p - paginaAtual) <= 1;
+                      })
+                      .map((p, idx, arr) => {
+                        const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
+                        return (
+                          <div key={p} className="flex items-center">
+                            {showEllipsis && <span className="px-1 text-gray-400">...</span>}
+                            <button
+                              onClick={() => setPaginaAtual(p)}
+                              className={`w-7 h-7 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                                paginaAtual === p
+                                  ? "bg-[#9C1C0E] text-white"
+                                  : "bg-white border border-gray-200 hover:bg-gray-100 text-gray-700"
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                    <button
+                      onClick={() => setPaginaAtual((p) => Math.min(totalPaginasHistorico, p + 1))}
+                      disabled={paginaAtual === totalPaginasHistorico}
+                      className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      title="Próxima Página"
+                    >
+                      <MdChevronRight size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
