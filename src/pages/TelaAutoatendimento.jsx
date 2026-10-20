@@ -33,6 +33,27 @@ import FiltroCategorias from "../components/cardapio/FiltroCategorias";
 import GridProdutos from "../components/cardapio/GridProdutos";
 import ModalDetalhesProduto from "../components/cardapio/ModalDetalhesProduto";
 
+const MESA_STORAGE_KEY = "fastcooking_mesa_cliente";
+
+function salvarSessaoMesa(dados) {
+  try {
+    if (!dados || !dados.idMesa) return;
+    const anterior = recuperarSessaoMesa() || {};
+    sessionStorage.setItem(MESA_STORAGE_KEY, JSON.stringify({ ...anterior, ...dados }));
+  } catch (e) {
+    console.warn("Falha ao salvar sessão da mesa no storage:", e);
+  }
+}
+
+function recuperarSessaoMesa() {
+  try {
+    const raw = sessionStorage.getItem(MESA_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function isUuid(val) {
   return (
     typeof val === "string" &&
@@ -50,13 +71,19 @@ export default function TelaAutoatendimento() {
   const idRestauranteQuery = searchParams.get("idRestaurante") || searchParams.get("restaurante");
   const sessaoIdQuery = searchParams.get("sessao_id") || searchParams.get("sessao");
 
+  const storageInicial = recuperarSessaoMesa();
+
   // Mesa & Session info
   const [mesaInfo, setMesaInfo] = useState({
-    numero: numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : null),
-    idMesa: isUuid(idMesaQuery) ? idMesaQuery : isUuid(mesaQuery) ? mesaQuery : null,
-    idRestaurante: idRestauranteQuery,
-    sessao_id: sessaoIdQuery,
-    idPedidoAtivo: null,
+    numero: numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : storageInicial?.numero || null),
+    idMesa: isUuid(idMesaQuery)
+      ? idMesaQuery
+      : isUuid(mesaQuery)
+      ? mesaQuery
+      : storageInicial?.idMesa || null,
+    idRestaurante: idRestauranteQuery || storageInicial?.idRestaurante || null,
+    sessao_id: sessaoIdQuery || storageInicial?.sessao_id || null,
+    idPedidoAtivo: storageInicial?.idPedidoAtivo || null,
   });
 
   // State
@@ -103,11 +130,16 @@ export default function TelaAutoatendimento() {
     async function inicializar() {
       try {
         setCarregando(true);
-        let idRest = idRestauranteQuery;
-        let idSessao = sessaoIdQuery;
-        let idPedAtivo = null;
-        let numMesa = numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : null);
-        let targetIdMesa = isUuid(idMesaQuery) ? idMesaQuery : isUuid(mesaQuery) ? mesaQuery : null;
+        const storageMesa = recuperarSessaoMesa();
+        let idRest = idRestauranteQuery || storageMesa?.idRestaurante || null;
+        let idSessao = sessaoIdQuery || storageMesa?.sessao_id || null;
+        let idPedAtivo = storageMesa?.idPedidoAtivo || null;
+        let numMesa = numMesaQuery || (!isNaN(mesaQuery) ? mesaQuery : storageMesa?.numero || null);
+        let targetIdMesa = isUuid(idMesaQuery)
+          ? idMesaQuery
+          : isUuid(mesaQuery)
+          ? mesaQuery
+          : storageMesa?.idMesa || null;
         let nomeRest = null;
 
         // Se temos número da mesa e idRestaurante mas não o UUID da mesa, busca nas mesas cadastradas
@@ -139,7 +171,7 @@ export default function TelaAutoatendimento() {
             }
           }
 
-          // Busca pedido/comanda ativo na mesa para o tracking
+          // Busca pedido/comanda ativo na mesa para o acompanhamento
           const comandaAtiva = await obterPedidoAtivoMesa(targetIdMesa).catch(() => null);
           const idPed = comandaAtiva?.idPedido || comandaAtiva?.pedido?.idPedido;
           const statusPed = comandaAtiva?.status || comandaAtiva?.pedido?.status;
@@ -166,13 +198,17 @@ export default function TelaAutoatendimento() {
 
         if (ativo) {
           if (nomeRest) setNomeRestaurante(nomeRest);
-          setMesaInfo({
+          const infoAtualizada = {
             numero: numMesa,
             idMesa: targetIdMesa,
             idRestaurante: idRest,
             sessao_id: idSessao || `sessao-${Date.now()}`,
             idPedidoAtivo: idPedAtivo,
-          });
+          };
+          setMesaInfo(infoAtualizada);
+          if (targetIdMesa) {
+            salvarSessaoMesa(infoAtualizada);
+          }
         }
 
         // Fetch products for restaurant if idRestaurante is present
@@ -270,6 +306,7 @@ export default function TelaAutoatendimento() {
             itens: comanda.itens || [],
           });
           setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: idPed }));
+          salvarSessaoMesa({ idMesa: mesaInfo.idMesa, idPedidoAtivo: idPed });
         }
       } catch (err) {
         console.warn("Erro ao sincronizar comanda da mesa:", err);
@@ -427,7 +464,18 @@ export default function TelaAutoatendimento() {
 
       setCarrinho([]);
       setExibirResumoPedido(false);
-      navigate(`/tracking/${pedidoId}`);
+      salvarSessaoMesa({
+        idMesa: mesaInfo.idMesa,
+        idPedidoAtivo: pedidoId,
+        idRestaurante: mesaInfo.idRestaurante,
+        numero: mesaInfo.numero,
+      });
+
+      const p = new URLSearchParams();
+      if (mesaInfo.idMesa) p.set("idMesa", mesaInfo.idMesa);
+      if (mesaInfo.idRestaurante) p.set("idRestaurante", mesaInfo.idRestaurante);
+      if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
+      navigate(`/tracking/${pedidoId}?${p.toString()}`);
     } catch (err) {
       setErro(err.message || "Erro ao finalizar pedido. Tente novamente.");
     } finally {
@@ -462,58 +510,42 @@ export default function TelaAutoatendimento() {
           )}
 
           {/* Top Bar with Restaurant / Table Info & Actions */}
-          <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
-            <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center justify-between gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 onClick={() => navigate("/")}
-                className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-white/80 transition-all cursor-pointer"
+                className="p-2 rounded-xl text-gray-500 hover:text-gray-900 hover:bg-white/80 transition-all cursor-pointer shrink-0"
                 title="Voltar ao início"
               >
-                <MdArrowBack size={22} />
+                <MdArrowBack size={20} className="sm:w-[22px] sm:h-[22px]" />
               </button>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-black text-[#9C1C0E] tracking-tight leading-tight">
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl font-black text-[#9C1C0E] tracking-tight leading-tight truncate max-w-[130px] xs:max-w-[180px] sm:max-w-xs md:max-w-md">
                   {nomeRestaurante || "Cardápio"}
                 </h1>
                 {mesaInfo.numero ? (
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#B78A10] bg-[#B78A10]/15 px-2.5 py-0.5 rounded-md">
-                    <MdTableBar size={14} /> Mesa {mesaInfo.numero}
+                  <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-[#B78A10] bg-[#B78A10]/15 px-2 py-0.5 rounded-md shrink-0">
+                    <MdTableBar size={13} /> Mesa {mesaInfo.numero}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-gray-400">Autoatendimento</span>
+                  <span className="text-[11px] text-gray-400 block truncate">Autoatendimento</span>
                 )}
               </div>
             </div>
 
-            {/* Actions: Timer + Instruções + Tracking + Chamar Garçom + Meu Pedido */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap sm:flex-nowrap justify-end">
-              {/* Timer de Inatividade para o 1º Pedido */}
-              {mesaInfo.idMesa && !temPedidoComItens && (
-                <div
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs shrink-0 ${
-                    tempoRestante <= 120
-                      ? "bg-red-600 text-white animate-pulse"
-                      : tempoRestante <= 300
-                      ? "bg-amber-500 text-white"
-                      : "bg-amber-100 text-amber-900 border border-amber-300"
-                  }`}
-                  title="Tempo limite de 10 minutos para o 1º pedido nesta mesa"
-                >
-                  <MdAccessTime size={16} />
-                  <span>1º Pedido: {formatarTempo(tempoRestante)}</span>
-                </div>
-              )}
-
+            {/* Actions: Instruções + Acompanhar Pedidos + Chamar Garçom + Meu Pedido */}
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Botão de Instruções */}
               <button
                 onClick={() => setModalInstrucoes(true)}
-                className="p-2 sm:p-2.5 rounded-2xl bg-white border border-gray-200 text-gray-600 hover:text-[#9C1C0E] hover:border-[#9C1C0E] shadow-xs transition-all cursor-pointer shrink-0"
+                className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white border border-gray-200 text-gray-600 hover:text-[#9C1C0E] hover:border-[#9C1C0E] shadow-xs transition-all cursor-pointer shrink-0"
                 title="Como funciona o autoatendimento"
+                aria-label="Instruções de uso"
               >
-                <MdHelpOutline size={20} />
+                <MdHelpOutline size={18} className="sm:w-5 sm:h-5" />
               </button>
 
-              {/* Botão de Acompanhar Tracking no Header quando houver pedido ativo */}
+              {/* Botão de Acompanhar Pedidos no Header quando houver pedido ativo */}
               {pedidoAtivoInfo && pedidoAtivoInfo.idPedido && (
                 <button
                   onClick={() => {
@@ -523,11 +555,12 @@ export default function TelaAutoatendimento() {
                     if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
                     navigate(`/tracking/${pedidoAtivoInfo.idPedido}?${p.toString()}`);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer shrink-0"
-                  title="Acompanhar status do pedido na tela de tracking"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-xl sm:rounded-2xl shadow-xs transition-all cursor-pointer shrink-0"
+                  title="Acompanhar pedidos em andamento"
                 >
                   <MdTimeline size={18} />
-                  <span className="hidden sm:inline">Tracking</span>
+                  <span className="hidden md:inline">Acompanhar Pedidos</span>
+                  <span className="hidden sm:inline md:hidden">Acompanhar</span>
                 </button>
               )}
 
@@ -535,30 +568,54 @@ export default function TelaAutoatendimento() {
                 <button
                   onClick={handleChamarGarcom}
                   disabled={chamandoGarcom}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-bold rounded-xl sm:rounded-2xl shadow-xs transition-all cursor-pointer disabled:opacity-50 shrink-0"
                   title="Chamar garçom para a sua mesa"
                 >
-                  <MdNotificationsActive size={18} className={chamandoGarcom ? "animate-spin" : ""} />
+                  <MdNotificationsActive size={17} className={chamandoGarcom ? "animate-spin" : ""} />
                   <span className="hidden sm:inline">{chamandoGarcom ? "Chamando..." : "Chamar Garçom"}</span>
-                  <span className="sm:hidden">{chamandoGarcom ? "..." : "Garçom"}</span>
+                  <span className="sm:hidden text-xs">{chamandoGarcom ? "..." : "Garçom"}</span>
                 </button>
               )}
 
               {/* Cart Icon Badge */}
               <button
                 onClick={() => setExibirResumoPedido(true)}
-                className="relative flex items-center gap-2 px-3 sm:px-4 py-2 bg-[#9C1C0E]/10 text-[#9C1C0E] hover:bg-[#9C1C0E]/20 rounded-2xl transition-all cursor-pointer font-semibold text-xs sm:text-sm shrink-0"
+                className="relative flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 bg-[#9C1C0E]/10 text-[#9C1C0E] hover:bg-[#9C1C0E]/20 rounded-xl sm:rounded-2xl transition-all cursor-pointer font-semibold text-xs sm:text-sm shrink-0"
+                title="Visualizar itens do meu pedido"
               >
-                <MdShoppingBag size={20} />
+                <MdShoppingBag size={18} className="sm:w-5 sm:h-5" />
                 <span className="hidden sm:inline">Meu Pedido</span>
                 {totalItensPedido > 0 && (
-                  <span className="bg-[#9C1C0E] text-white text-xs font-extrabold w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
+                  <span className="bg-[#9C1C0E] text-white text-[11px] font-extrabold min-w-5 h-5 px-1 rounded-full flex items-center justify-center animate-pulse">
                     {totalItensPedido}
                   </span>
                 )}
               </button>
             </div>
           </div>
+
+          {/* Faixa Dedicada para Timer de Inatividade do 1º Pedido (não ocupa nem quebra a topbar) */}
+          {mesaInfo.idMesa && !temPedidoComItens && (
+            <div
+              className={`flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs ${
+                tempoRestante <= 120
+                  ? "bg-red-600 text-white animate-pulse"
+                  : tempoRestante <= 300
+                  ? "bg-amber-500 text-white"
+                  : "bg-amber-100/90 text-amber-900 border border-amber-300/80"
+              }`}
+              title="Tempo limite de 10 minutos para o 1º pedido nesta mesa"
+            >
+              <div className="flex items-center gap-1.5">
+                <MdAccessTime size={16} />
+                <span className="hidden xs:inline">Tempo para o 1º pedido nesta mesa:</span>
+                <span className="xs:hidden">Tempo p/ 1º pedido:</span>
+              </div>
+              <span className="font-mono font-extrabold px-2 py-0.5 rounded-md bg-black/10">
+                {formatarTempo(tempoRestante)}
+              </span>
+            </div>
+          )}
 
           {/* Active Order Tracking Banner (Responsivo para celular e desktop) */}
           {pedidoAtivoInfo && (
@@ -588,7 +645,7 @@ export default function TelaAutoatendimento() {
                 }}
                 className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer w-full sm:w-auto"
               >
-                <span>Acompanhar Preparo no Tracking</span>
+                <span>Acompanhar Pedidos</span>
                 <span>➔</span>
               </button>
             </div>
@@ -799,91 +856,94 @@ export default function TelaAutoatendimento() {
         </p>
       </footer>
 
-      {/* ─── Modal de Instruções do Autoatendimento ─── */}
+      {/* ─── Modal de Instruções do Autoatendimento (Design Flexível e Responsivo) ─── */}
       {modalInstrucoes && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 sm:p-8 animate-fade-in">
-            <div className="flex justify-between items-center mb-5 border-b pb-3 border-gray-100">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-fade-in border border-gray-100">
+            {/* Header fixo no topo do modal */}
+            <div className="flex justify-between items-center px-4 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-[#9C1C0E]/10 text-[#9C1C0E] flex items-center justify-center font-bold">
-                  <MdHelpOutline size={24} />
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#9C1C0E]/10 text-[#9C1C0E] flex items-center justify-center font-bold shrink-0">
+                  <MdHelpOutline size={22} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-extrabold text-gray-900">
+                  <h2 className="text-base sm:text-lg font-extrabold text-gray-900 leading-tight">
                     Instruções de Autoatendimento
                   </h2>
-                  <p className="text-xs text-gray-500">Como funciona o seu pedido digital</p>
+                  <p className="text-[11px] sm:text-xs text-gray-500">Como funciona o seu pedido digital</p>
                 </div>
               </div>
               <button
                 onClick={() => setModalInstrucoes(false)}
-                className="text-gray-400 hover:text-gray-700 text-2xl font-bold cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors text-2xl font-bold cursor-pointer"
+                aria-label="Fechar instruções"
               >
                 &times;
               </button>
             </div>
 
-            <div className="space-y-3.5 text-xs sm:text-sm text-gray-700">
-              <div className="flex items-start gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
-                <span className="text-xl">🍽️</span>
-                <div>
-                  <strong className="text-gray-900 block font-bold mb-0.5">1. Escolha seus itens</strong>
-                  <span>Navegue pelas categorias ou busque pratos e bebidas para ver fotos, preços e ingredientes.</span>
+            {/* Conteúdo flexível com grid responsivo sem estourar altura */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 text-xs sm:text-sm text-gray-700">
+                <div className="flex items-start gap-2.5 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
+                  <span className="text-lg shrink-0 mt-0.5">🍽️</span>
+                  <div>
+                    <strong className="text-gray-900 block font-bold text-xs sm:text-sm mb-0.5">1. Escolha seus itens</strong>
+                    <span className="text-[11px] sm:text-xs text-gray-600 leading-snug block">Navegue pelas categorias ou use a busca para fotos, preços e detalhes.</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-start gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
-                <span className="text-xl">➕</span>
-                <div>
-                  <strong className="text-gray-900 block font-bold mb-0.5">2. Monte seu pedido</strong>
-                  <span>Clique nos itens para personalizar observações (retirar algum ingrediente) e adicione ao carrinho.</span>
+                <div className="flex items-start gap-2.5 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
+                  <span className="text-lg shrink-0 mt-0.5">➕</span>
+                  <div>
+                    <strong className="text-gray-900 block font-bold text-xs sm:text-sm mb-0.5">2. Monte seu pedido</strong>
+                    <span className="text-[11px] sm:text-xs text-gray-600 leading-snug block">Personalize retirando ingredientes ou adicionando observações ao prato.</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-start gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
-                <span className="text-xl">🚀</span>
-                <div>
-                  <strong className="text-gray-900 block font-bold mb-0.5">3. Envie para a cozinha</strong>
-                  <span>Abra "Meu Pedido", confira os itens e finalize. O pedido é enviado em tempo real para a equipe da cozinha!</span>
+                <div className="flex items-start gap-2.5 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
+                  <span className="text-lg shrink-0 mt-0.5">🚀</span>
+                  <div>
+                    <strong className="text-gray-900 block font-bold text-xs sm:text-sm mb-0.5">3. Envie para a cozinha</strong>
+                    <span className="text-[11px] sm:text-xs text-gray-600 leading-snug block">Abra "Meu Pedido", confira e envie direto para a equipe de preparo.</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-start gap-3 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
-                <span className="text-xl">⏱️</span>
-                <div>
-                  <strong className="text-gray-900 block font-bold mb-0.5">4. Acompanhe em tempo real</strong>
-                  <span>Na tela de tracking, acompanhe o preparo de cada prato até a entrega na sua mesa.</span>
+                <div className="flex items-start gap-2.5 bg-stone-50 p-3 rounded-2xl border border-stone-200/60">
+                  <span className="text-lg shrink-0 mt-0.5">⏱️</span>
+                  <div>
+                    <strong className="text-gray-900 block font-bold text-xs sm:text-sm mb-0.5">4. Acompanhe em tempo real</strong>
+                    <span className="text-[11px] sm:text-xs text-gray-600 leading-snug block">Em "Acompanhar Pedidos", veja cada item até a entrega na mesa.</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Alerta de Fechamento de Mesa e Ajuda */}
-              {/* Regra dos 10 Minutos para o Primeiro Pedido */}
-              <div className="flex items-start gap-3 bg-red-50 p-3.5 rounded-2xl border border-red-200 text-red-950 shadow-xs">
-                <span className="text-2xl">⏳</span>
-                <div>
-                  <strong className="text-red-950 block font-bold mb-0.5">5. Limite de 10 min para o 1º pedido</strong>
-                  <span className="text-xs text-red-900 leading-relaxed block">
-                    Após abrir a mesa, você tem <strong>até 10 minutos</strong> para realizar o seu primeiro pedido. Se nenhum pedido for feito nesse período, a mesa será <strong>automaticamente considerada fechada</strong> para liberar o atendimento. Após o primeiro pedido, esse limite não se aplica mais!
-                  </span>
+                <div className="flex items-start gap-2.5 bg-red-50/80 p-3 rounded-2xl border border-red-200 text-red-950">
+                  <span className="text-lg shrink-0 mt-0.5">⏳</span>
+                  <div>
+                    <strong className="text-red-950 block font-bold text-xs sm:text-sm mb-0.5">5. Limite para o 1º pedido</strong>
+                    <span className="text-[11px] sm:text-xs text-red-900 leading-snug block">
+                      Você tem até <strong>10 minutos</strong> para o primeiro pedido. Após o 1º envio, a mesa fica livre de limite!
+                    </span>
+                  </div>
                 </div>
-              </div>
 
-              {/* Alerta de Fechamento de Mesa e Ajuda */}
-              <div className="flex items-start gap-3 bg-amber-50 p-3.5 rounded-2xl border border-amber-300 text-amber-950 shadow-xs">
-                <span className="text-2xl">🛎️</span>
-                <div>
-                  <strong className="text-amber-950 block font-bold mb-0.5">6. Fechamento de Mesa ou Ajuda</strong>
-                  <span className="text-xs text-amber-900 leading-relaxed block">
-                    Para <strong>solicitar o fechamento da conta/mesa</strong> ou pedir ajuda com seus pedidos, basta tocar no botão <strong>"Chamar Garçom"</strong> no topo da tela ou chamar um garçom da equipe a qualquer momento!
-                  </span>
+                <div className="flex items-start gap-2.5 bg-amber-50/80 p-3 rounded-2xl border border-amber-300 text-amber-950">
+                  <span className="text-lg shrink-0 mt-0.5">🛎️</span>
+                  <div>
+                    <strong className="text-amber-950 block font-bold text-xs sm:text-sm mb-0.5">6. Ajuda ou Fechar Mesa</strong>
+                    <span className="text-[11px] sm:text-xs text-amber-900 leading-snug block">
+                      Toque em <strong>"Chamar Garçom"</strong> a qualquer momento para suporte ou fechar a conta.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="mt-6">
+            {/* Footer fixo com botão de fechar */}
+            <div className="px-4 sm:px-6 py-3 bg-gray-50/80 border-t border-gray-100 rounded-b-3xl shrink-0">
               <button
                 onClick={() => setModalInstrucoes(false)}
-                className="w-full py-3 bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold text-sm rounded-2xl shadow-md transition-all cursor-pointer"
+                className="w-full py-2.5 sm:py-3 bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-md transition-all cursor-pointer"
               >
                 Entendi, vamos aos pedidos!
               </button>

@@ -1405,7 +1405,7 @@ function TelaGerente() {
                                 title="Acompanhar status do preparo dos pedidos desta mesa em tempo real"
                               >
                                 <MdTimeline size={16} />
-                                <span>Tracking</span>
+                                <span>Acompanhar Pedido</span>
                                 <MdLaunch size={12} />
                               </button>
                             </div>
@@ -1567,7 +1567,7 @@ function TelaGerente() {
                           className="text-xs text-[#9C1C0E] hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                         >
                           <MdTimeline size={14} />
-                          <span>Tracking</span>
+                          <span>Acompanhar Pedido</span>
                           <MdLaunch size={12} />
                         </button>
                       )}

@@ -89,26 +89,61 @@ export default function OrderTracking() {
     reconnectAttempt,
   } = useOrderTrackingSocket(activeOrderId);
 
+  // Helper para recuperar e atualizar dados da mesa no sessionStorage
+  const getStorageMesa = () => {
+    try {
+      const raw = sessionStorage.getItem('fastcooking_mesa_cliente');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Se o pedido trouxer dados da mesa, sincroniza com o sessionStorage
+  useEffect(() => {
+    if (order?.idMesa || activeOrderId) {
+      try {
+        const anterior = getStorageMesa() || {};
+        sessionStorage.setItem(
+          'fastcooking_mesa_cliente',
+          JSON.stringify({
+            ...anterior,
+            ...(order?.idMesa ? { idMesa: order.idMesa } : {}),
+            ...(order?.idRestaurante ? { idRestaurante: order.idRestaurante } : {}),
+            ...(order?.tableNumber ? { numero: order.tableNumber } : {}),
+            ...(activeOrderId ? { idPedidoAtivo: activeOrderId } : {}),
+          })
+        );
+      } catch (err) {
+        console.warn('Erro ao atualizar storage da mesa no tracking:', err);
+      }
+    }
+  }, [order, activeOrderId]);
+
   const [chamandoGarcom, setChamandoGarcom] = useState(false);
   const [alertaGarcom, setAlertaGarcom] = useState(null);
 
+  const storageMesa = getStorageMesa();
+  const mesaIdResolved = order?.idMesa || searchParams.get('idMesa') || storageMesa?.idMesa;
+  const idRestauranteResolved = order?.idRestaurante || searchParams.get('idRestaurante') || storageMesa?.idRestaurante;
+  const numMesaResolved = order?.tableNumber || searchParams.get('mesa') || storageMesa?.numero;
+
   function handleVoltarAoCardapio() {
     const params = new URLSearchParams();
-    if (order?.idMesa) params.set('idMesa', order.idMesa);
-    if (order?.idRestaurante) params.set('idRestaurante', order.idRestaurante);
-    if (order?.tableNumber) params.set('mesa', order.tableNumber);
+    if (mesaIdResolved) params.set('idMesa', mesaIdResolved);
+    if (idRestauranteResolved) params.set('idRestaurante', idRestauranteResolved);
+    if (numMesaResolved) params.set('mesa', numMesaResolved);
     navigate(`/cardapio?${params.toString()}`);
   }
 
   async function handleChamarGarcom() {
-    const mesaId = order?.idMesa;
-    if (!mesaId) {
+    if (!mesaIdResolved) {
       alert('Identificação da mesa não disponível neste pedido.');
       return;
     }
     setChamandoGarcom(true);
     try {
-      await chamarGarcom(mesaId);
+      await chamarGarcom(mesaIdResolved);
       setAlertaGarcom('🛎️ Garçom chamado com sucesso! Aguarde em sua mesa.');
       setTimeout(() => setAlertaGarcom(null), 6000);
     } catch (err) {
@@ -240,7 +275,7 @@ export default function OrderTracking() {
             <span>Voltar ao Cardápio</span>
           </button>
 
-          {order?.idMesa && (
+          {mesaIdResolved && (
             <button
               onClick={handleChamarGarcom}
               disabled={chamandoGarcom}

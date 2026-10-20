@@ -173,10 +173,10 @@ export default function ModalComandaMesa({ mesa, onClose }) {
               type="button"
               onClick={() => window.open(`/tracking/${comanda.idPedido}`, "_blank")}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-              title="Acompanhar o preparo e status em tempo real na tela de tracking"
+              title="Acompanhar o preparo e status em tempo real na tela de acompanhamento"
             >
               <MdTimeline size={18} />
-              <span>Acompanhar no Tracking</span>
+              <span>Acompanhar Pedidos</span>
               <MdLaunch size={14} />
             </button>
           ) : (
