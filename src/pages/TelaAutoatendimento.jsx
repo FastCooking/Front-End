@@ -533,7 +533,7 @@ export default function TelaAutoatendimento() {
               </div>
             </div>
 
-            {/* Actions: Instruções + Acompanhar Pedidos + Chamar Garçom + Meu Pedido */}
+            {/* Actions: Instruções + Chamar Garçom + Meu Pedido */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Botão de Instruções */}
               <button
@@ -544,25 +544,6 @@ export default function TelaAutoatendimento() {
               >
                 <MdHelpOutline size={18} className="sm:w-5 sm:h-5" />
               </button>
-
-              {/* Botão de Acompanhar Pedidos no Header quando houver pedido ativo */}
-              {pedidoAtivoInfo && pedidoAtivoInfo.idPedido && (
-                <button
-                  onClick={() => {
-                    const p = new URLSearchParams();
-                    if (mesaInfo.idMesa) p.set("idMesa", mesaInfo.idMesa);
-                    if (mesaInfo.idRestaurante) p.set("idRestaurante", mesaInfo.idRestaurante);
-                    if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
-                    navigate(`/tracking/${pedidoAtivoInfo.idPedido}?${p.toString()}`);
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold rounded-xl sm:rounded-2xl shadow-xs transition-all cursor-pointer shrink-0"
-                  title="Acompanhar pedidos em andamento"
-                >
-                  <MdTimeline size={18} />
-                  <span className="hidden md:inline">Acompanhar Pedidos</span>
-                  <span className="hidden sm:inline md:hidden">Acompanhar</span>
-                </button>
-              )}
 
               {mesaInfo.idMesa && (
                 <button
