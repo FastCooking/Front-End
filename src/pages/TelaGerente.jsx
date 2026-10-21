@@ -1374,41 +1374,14 @@ function TelaGerente() {
                             </button>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setMesaComanda(m)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
-                                title="Visualizar itens e consumo ativo da mesa"
-                              >
-                                <MdReceiptLong size={18} />
-                                <span>Ver Comanda</span>
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (m.idPedidoAtivo) {
-                                    window.open(`/tracking/${m.idPedidoAtivo}`, "_blank");
-                                    return;
-                                  }
-                                  try {
-                                    const comanda = await obterPedidoAtivoMesa(m.idMesa);
-                                    const idPed = comanda?.idPedido || comanda?.pedido?.idPedido;
-                                    if (idPed) {
-                                      window.open(`/tracking/${idPed}`, "_blank");
-                                    } else {
-                                      setMesaComanda(m);
-                                    }
-                                  } catch (err) {
-                                    setMesaComanda(m);
-                                  }
-                                }}
-                                className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-[#9C1C0E] border border-amber-200 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
-                                title="Acompanhar status do preparo dos pedidos desta mesa em tempo real"
-                              >
-                                <MdTimeline size={16} />
-                                <span>Acompanhar Pedido</span>
-                                <MdLaunch size={12} />
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => setMesaComanda(m)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                              title="Visualizar itens, acompanhamento de preparo e consumo da mesa"
+                            >
+                              <MdReceiptLong size={18} className="text-[#9C1C0E]" />
+                              <span>Ver Comanda</span>
+                            </button>
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -1770,6 +1743,9 @@ function TelaGerente() {
                           )}
                         </div>
                       </th>
+                      <th className="px-6 py-3 font-semibold">ID Pedido</th>
+                      <th className="px-6 py-3 font-semibold">Mesa</th>
+                      <th className="px-6 py-3 font-semibold">Fechado por</th>
                       <th className="px-6 py-3 font-semibold">Pagamento</th>
                       <th
                         onClick={() => alternarOrdenacao("total")}
@@ -1791,7 +1767,7 @@ function TelaGerente() {
                   <tbody className="divide-y divide-gray-100">
                     {carregandoHistorico ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-10 text-gray-500">
+                        <td colSpan={8} className="text-center py-10 text-gray-500">
                           <div className="flex flex-col items-center justify-center gap-2">
                             <div className="w-8 h-8 border-3 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
                             <span className="text-xs">Carregando histórico de pedidos...</span>
@@ -1800,7 +1776,7 @@ function TelaGerente() {
                       </tr>
                     ) : historicoPaginado.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center py-12 text-gray-500 text-xs">
+                        <td colSpan={8} className="text-center py-12 text-gray-500 text-xs">
                           Nenhum pedido encontrado para os filtros selecionados.
                         </td>
                       </tr>
@@ -1822,8 +1798,19 @@ function TelaGerente() {
                                    : ""}
                               </div>
                             </td>
+                            <td className="px-6 py-4 font-mono font-bold text-gray-800 text-xs">
+                              #{h.idPedido ? h.idPedido.slice(0, 8) : "--"}
+                            </td>
                             <td className="px-6 py-4 font-bold text-gray-900">
                               Mesa #{h.numeroMesa || "--"}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-gray-700">
+                              <span className="font-semibold text-gray-900 block">
+                                {h.nomeUsuarioFechamento || h.nomeGarcom || "Atendimento"}
+                              </span>
+                              <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-medium">
+                                {h.funcaoUsuarioFechamento || "Equipe"}
+                              </span>
                             </td>
                             <td className="px-6 py-4 text-xs text-gray-700">
                               <span className="inline-flex items-center gap-1 bg-gray-100 px-2.5 py-1 rounded-md text-gray-800 font-medium">
@@ -2038,11 +2025,15 @@ function TelaGerente() {
             <div className="flex justify-between items-center mb-4 border-b pb-3 border-[#B78A10]/30">
               <div>
                 <h2 className="text-xl font-bold text-[#9C1C0E] flex items-center gap-2">
-                  <MdHistory size={24} /> Pedido #{detalhesHistoricoModal.numeroMesa ? `Mesa ${detalhesHistoricoModal.numeroMesa}` : detalhesHistoricoModal.idPedido.slice(0, 8)}
+                  <MdHistory size={24} /> Pedido #{detalhesHistoricoModal.idPedido?.slice(0, 8)} {detalhesHistoricoModal.numeroMesa ? `— Mesa ${detalhesHistoricoModal.numeroMesa}` : ""}
                 </h2>
-                <p className="text-xs text-gray-500">
-                  Status: <strong className={detalhesHistoricoModal.status === "Fechado" ? "text-emerald-700" : "text-red-700"}>{detalhesHistoricoModal.status}</strong>
-                </p>
+                <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                  <span>ID Completo: <strong className="font-mono text-gray-800">{detalhesHistoricoModal.idPedido}</strong></span>
+                  <span>•</span>
+                  <span>
+                    Status: <strong className={detalhesHistoricoModal.status === "Fechado" ? "text-emerald-700" : "text-red-700"}>{detalhesHistoricoModal.status}</strong>
+                  </span>
+                </div>
               </div>
               <button
                 onClick={() => setDetalhesHistoricoModal(null)}
@@ -2056,6 +2047,7 @@ function TelaGerente() {
               <div className="bg-[#F9ECE5]/60 p-3 rounded-xl text-xs text-gray-700 flex flex-wrap justify-between gap-2">
                 <span>Abertura: <strong>{detalhesHistoricoModal.dataAbertura ? new Date(detalhesHistoricoModal.dataAbertura).toLocaleString("pt-BR") : "--"}</strong></span>
                 <span>Fechamento: <strong>{detalhesHistoricoModal.dataFechamento ? new Date(detalhesHistoricoModal.dataFechamento).toLocaleString("pt-BR") : "--"}</strong></span>
+                <span>Fechado por: <strong className="text-[#9C1C0E]">{detalhesHistoricoModal.nomeUsuarioFechamento || detalhesHistoricoModal.nomeGarcom || "Atendimento"} ({detalhesHistoricoModal.funcaoUsuarioFechamento || "Equipe"})</strong></span>
               </div>
 
               <div>

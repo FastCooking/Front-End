@@ -30,6 +30,8 @@ import ModalEditarRestaurante from "../components/administrador/ModalEditarResta
 import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
 import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
 import ModalResetarSenha from "../components/administrador/ModalResetarSenha";
+import ModalAlerta from "../components/common/ModalAlerta";
+import ModalConfirmacao from "../components/common/ModalConfirmacao";
 
 import logo from "../assets/fast cooking logo.png";
 
@@ -61,6 +63,17 @@ function TelaAdministrador() {
   const [modalNovoUser, setModalNovoUser] = useState(false);
   const [modalEditUser, setModalEditUser] = useState(null);
   const [modalResetSenha, setModalResetSenha] = useState(null);
+
+  // Modais de feedback (zero window.alert / window.confirm)
+  const [alerta, setAlerta] = useState({ aberto: false, titulo: "", mensagem: "", tipo: "info" });
+  const [confirmacao, setConfirmacao] = useState({
+    aberto: false,
+    titulo: "",
+    mensagem: "",
+    detalhes: null,
+    tipo: "perigo",
+    onConfirmar: null,
+  });
 
   // Verificação de permissão
   useEffect(() => {
@@ -161,30 +174,40 @@ function TelaAdministrador() {
       dispararSucesso(`Status de "${r.nome}" atualizado!`);
       carregarRestaurantes();
     } catch (err) {
-      alert(err.message || "Erro ao alternar status do restaurante.");
+      setAlerta({ aberto: true, titulo: "Erro", mensagem: err.message || "Erro ao alternar status do restaurante.", tipo: "erro" });
     }
   }
 
   async function handleExcluirRestaurante(r) {
-    const confirmar = window.confirm(
-      `Deseja realmente remover o restaurante "${r.nome}"? Esta ação desativará e removerá o restaurante do sistema.`
-    );
-    if (!confirmar) return;
-
-    try {
-      await excluirRestaurante(r.idRestaurante);
-      dispararSucesso(`Restaurante "${r.nome}" removido com sucesso!`);
-      carregarRestaurantes();
-      carregarUsuarios();
-    } catch (err) {
-      alert(err.message || "Erro ao remover restaurante.");
-    }
+    setConfirmacao({
+      aberto: true,
+      titulo: "Remover Restaurante",
+      mensagem: `Deseja realmente remover o restaurante "${r.nome}"? Esta ação desativará e removerá o restaurante do sistema.`,
+      tipo: "perigo",
+      textoConfirmar: "Remover Restaurante",
+      onConfirmar: async () => {
+        try {
+          await excluirRestaurante(r.idRestaurante);
+          setConfirmacao({ aberto: false });
+          dispararSucesso(`Restaurante "${r.nome}" removido com sucesso!`);
+          carregarRestaurantes();
+          carregarUsuarios();
+        } catch (err) {
+          setAlerta({ aberto: true, titulo: "Erro ao remover", mensagem: err.message || "Erro ao remover restaurante.", tipo: "erro" });
+        }
+      },
+    });
   }
 
   async function handleToggleStatusUsuario(u) {
     // Validação de proteção do usuário raiz
     if (u.email === EMAIL_ADMIN_PROTEGIDO) {
-      alert(`O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ter seu status alterado.`);
+      setAlerta({
+        aberto: true,
+        titulo: "Operação não permitida",
+        mensagem: `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ter seu status alterado.`,
+        tipo: "aviso",
+      });
       return;
     }
 
@@ -193,29 +216,39 @@ function TelaAdministrador() {
       dispararSucesso(`Status de "${u.nome}" atualizado!`);
       carregarUsuarios();
     } catch (err) {
-      alert(err.message || "Erro ao alternar status do usuário.");
+      setAlerta({ aberto: true, titulo: "Erro", mensagem: err.message || "Erro ao alternar status do usuário.", tipo: "erro" });
     }
   }
 
   async function handleExcluirUsuario(u) {
     // Validação de proteção do usuário raiz
     if (u.email === EMAIL_ADMIN_PROTEGIDO) {
-      alert(`O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ser removido.`);
+      setAlerta({
+        aberto: true,
+        titulo: "Operação não permitida",
+        mensagem: `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ser removido.`,
+        tipo: "aviso",
+      });
       return;
     }
 
-    const confirmar = window.confirm(
-      `Deseja realmente remover o usuário "${u.nome}" (${u.email})?`
-    );
-    if (!confirmar) return;
-
-    try {
-      await excluirUsuario(u.idUsuario);
-      dispararSucesso(`Usuário "${u.nome}" removido com sucesso!`);
-      carregarUsuarios();
-    } catch (err) {
-      alert(err.message || "Erro ao remover usuário.");
-    }
+    setConfirmacao({
+      aberto: true,
+      titulo: "Remover Usuário",
+      mensagem: `Deseja realmente remover o usuário "${u.nome}" (${u.email})?`,
+      tipo: "perigo",
+      textoConfirmar: "Remover Usuário",
+      onConfirmar: async () => {
+        try {
+          await excluirUsuario(u.idUsuario);
+          setConfirmacao({ aberto: false });
+          dispararSucesso(`Usuário "${u.nome}" removido com sucesso!`);
+          carregarUsuarios();
+        } catch (err) {
+          setAlerta({ aberto: true, titulo: "Erro ao remover", mensagem: err.message || "Erro ao remover usuário.", tipo: "erro" });
+        }
+      },
+    });
   }
 
   function handleLogout() {
@@ -233,7 +266,7 @@ function TelaAdministrador() {
   }, {});
 
   return (
-    <div className="min-h-screen bg-linear-to-r from-[#F9ECE5] to-[#D4C8C0] pb-12">
+    <div className="min-h-screen bg-[#FAF6F3] font-[Poppins] text-gray-800 pb-12">
       {/* Header / Navbar */}
       <header className="bg-white/80 backdrop-blur-md border-b border-[#9C1C0E]/20 sticky top-0 z-40 px-6 py-4 flex flex-wrap items-center justify-between shadow-xs">
         <div className="flex items-center gap-4">
@@ -659,6 +692,26 @@ function TelaAdministrador() {
           }}
         />
       )}
+
+      {/* Modais de Alerta e Confirmação */}
+      <ModalAlerta
+        aberto={alerta.aberto}
+        titulo={alerta.titulo}
+        mensagem={alerta.mensagem}
+        tipo={alerta.tipo}
+        onFechar={() => setAlerta((a) => ({ ...a, aberto: false }))}
+      />
+
+      <ModalConfirmacao
+        aberto={confirmacao.aberto}
+        titulo={confirmacao.titulo}
+        mensagem={confirmacao.mensagem}
+        detalhes={confirmacao.detalhes}
+        tipo={confirmacao.tipo}
+        textoConfirmar={confirmacao.textoConfirmar}
+        onConfirmar={confirmacao.onConfirmar}
+        onCancelar={() => setConfirmacao((c) => ({ ...c, aberto: false }))}
+      />
     </div>
   );
 }
