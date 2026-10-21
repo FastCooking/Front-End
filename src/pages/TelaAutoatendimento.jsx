@@ -377,7 +377,8 @@ export default function TelaAutoatendimento() {
   // Chamar Garçom
   async function handleChamarGarcom() {
     if (!mesaInfo.idMesa) {
-      alert("Para chamar o garçom, escaneie o QR Code localizado na sua mesa.");
+      setErro("Para chamar o garçom, escaneie o QR Code localizado na sua mesa.");
+      setTimeout(() => setErro(null), 5000);
       return;
     }
 
@@ -421,9 +422,8 @@ export default function TelaAutoatendimento() {
     if (carrinho.length === 0) return;
 
     if (!mesaInfo.idMesa) {
-      alert(
-        "Mesa não identificada. Por favor, aponte a câmera para o QR Code da sua mesa para enviar o pedido diretamente para a cozinha."
-      );
+      setErro("Mesa não identificada. Aponte a câmera para o QR Code da sua mesa para enviar o pedido diretamente para a cozinha.");
+      setTimeout(() => setErro(null), 6000);
       return;
     }
 
@@ -464,6 +464,7 @@ export default function TelaAutoatendimento() {
 
       setCarrinho([]);
       setExibirResumoPedido(false);
+      setMsgSucesso("✅ Pedido enviado com sucesso para a cozinha! Redirecionando para o acompanhamento...");
       salvarSessaoMesa({
         idMesa: mesaInfo.idMesa,
         idPedidoAtivo: pedidoId,
@@ -475,7 +476,10 @@ export default function TelaAutoatendimento() {
       if (mesaInfo.idMesa) p.set("idMesa", mesaInfo.idMesa);
       if (mesaInfo.idRestaurante) p.set("idRestaurante", mesaInfo.idRestaurante);
       if (mesaInfo.numero) p.set("mesa", mesaInfo.numero);
-      navigate(`/tracking/${pedidoId}?${p.toString()}`);
+
+      setTimeout(() => {
+        navigate(`/tracking/${pedidoId}?${p.toString()}`);
+      }, 1000);
     } catch (err) {
       setErro(err.message || "Erro ao finalizar pedido. Tente novamente.");
     } finally {

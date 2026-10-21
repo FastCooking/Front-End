@@ -239,8 +239,23 @@ export async function obterPedidoAtivoMesa(idMesa) {
   };
 }
 
-export async function registrarPagamento(idPedido, formaPagamento = 'Cartão de Crédito', valor = null) {
-  const payload = { formaPagamento };
+export async function alterarQuantidadeItem(idItemPedido, quantidade) {
+  const response = await fetch(`${BASE_URL}/pedidos/itens/${idItemPedido}/quantidade`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ quantidade: Number(quantidade) }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao alterar quantidade do item.');
+  }
+
+  return response.json();
+}
+
+export async function registrarPagamento(idPedido, formaPagamento = 'Cartão de Crédito', valor = null, cancelar_pendentes = true) {
+  const payload = { formaPagamento, cancelar_pendentes: Boolean(cancelar_pendentes) };
   if (valor !== null && valor !== undefined) {
     payload.valor = Number(valor);
   }
