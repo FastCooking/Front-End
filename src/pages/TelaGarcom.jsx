@@ -9,11 +9,25 @@ import {
   subscreverMudancasPedidos,
 } from "../services/garcomService.js";
 
+import {
+  buscarMesas,
+  aplicarDesconto,
+  removerDesconto,
+  registrarPagamento,
+  removerPagamento,
+  encerrarConta,
+  simularSolicitacaoFechamentoCliente,
+  subscreverMudancasMesas,
+} from "../services/mesasService.js";
+
 import HeaderGarcom from "../components/garcom/HeaderGarcom.jsx";
 import AlertaPedidoPronto from "../components/garcom/AlertaPedidoPronto.jsx";
 import CardPedidoPronto from "../components/garcom/CardPedidoPronto.jsx";
 import CardEntregaAtiva from "../components/garcom/CardEntregaAtiva.jsx";
 import CardEntregue from "../components/garcom/CardEntregue.jsx";
+import ListaMesasAbertas from "../components/garcom/ListaMesasAbertas.jsx";
+import VisualizacaoContaMesa from "../components/garcom/VisualizacaoContaMesa.jsx";
+import ModalReciboFechamento from "../components/garcom/ModalReciboFechamento.jsx";
 
 import {
   MdNotifications,
@@ -22,6 +36,8 @@ import {
   MdOutlineInfo,
   MdCheckCircle,
   MdErrorOutline,
+  MdReceiptLong,
+  MdNotificationsActive,
 } from "react-icons/md";
 
 function TelaGarcom() {
@@ -38,14 +54,19 @@ function TelaGarcom() {
     return { email: "garcom@test.com", perfil: "garcom", nome: "Garçom Carlos" };
   });
 
-  // Estados dos pedidos
+  // Estados dos pedidos (KDS / Entregas)
   const [prontos, setProntos] = useState([]);
   const [minhasEntregas, setMinhasEntregas] = useState([]);
   const [entregues, setEntregues] = useState([]);
   const [podeAssumir, setPodeAssumir] = useState(true);
   const [carregandoAcao, setCarregandoAcao] = useState(false);
 
-  // Aba ativa: 'prontos' | 'minha_entrega' | 'historico'
+  // Estados das Mesas e Fechamento de Conta (RF05, RF13, RF14, RF15, RF16)
+  const [mesas, setMesas] = useState([]);
+  const [mesaSelecionadaNumero, setMesaSelecionadaNumero] = useState(null);
+  const [reciboFechamento, setReciboFechamento] = useState(null);
+
+  // Aba ativa: 'prontos' | 'minha_entrega' | 'contas' | 'historico'
   const [abaAtiva, setAbaAtiva] = useState("prontos");
 
   // Alerta sonoro e visual
@@ -67,8 +88,8 @@ function TelaGarcom() {
     }, 4000);
   }, []);
 
-  // Carregar dados dos pedidos
-  const carregarDados = useCallback(async () => {
+  // Carregar dados dos pedidos (KDS)
+  const carregarDadosPedidos = useCallback(async () => {
     try {
       const dados = await buscarPedidosGarcom(usuario.email);
       setProntos(dados.prontos);
@@ -83,7 +104,6 @@ function TelaGarcom() {
         idsConhecidosRef.current = idsAtuais;
         primeiraCargaRef.current = false;
       } else {
-        // Encontra itens que acabaram de ficar prontos
         const novos = dados.prontos.filter((p) => !idsConhecidosRef.current.has(p.idItemPedido));
         if (novos.length > 0) {
           const ultimoNovo = novos[0];
@@ -103,35 +123,53 @@ function TelaGarcom() {
     }
   }, [usuario.email, somAtivo]);
 
+  // Carregar dados das Mesas e Fechamento
+  const carregarDadosMesas = useCallback(async () => {
+    try {
+      const dados = await buscarMesas();
+      setMesas(dados.mesas);
+    } catch (erro) {
+      console.error("Erro ao carregar mesas:", erro);
+    }
+  }, []);
+
   // Efeito de montagem: carrega dados e escuta mudanças em tempo real
   useEffect(() => {
     let cancelado = false;
 
-    // Executa assincronamente fora do fluxo síncrono do effect
     Promise.resolve().then(() => {
       if (!cancelado) {
-        carregarDados();
+        carregarDadosPedidos();
+        carregarDadosMesas();
       }
     });
 
-    const desinscrever = subscreverMudancasPedidos(() => {
+    const desinscreverPedidos = subscreverMudancasPedidos(() => {
       if (!cancelado) {
-        carregarDados();
+        carregarDadosPedidos();
+      }
+    });
+
+    const desinscreverMesas = subscreverMudancasMesas(() => {
+      if (!cancelado) {
+        carregarDadosMesas();
       }
     });
 
     const intervalo = setInterval(() => {
       if (!cancelado) {
-        carregarDados();
+        carregarDadosPedidos();
+        carregarDadosMesas();
       }
     }, 2000);
 
     return () => {
       cancelado = true;
-      desinscrever();
+      desinscreverPedidos();
+      desinscreverMesas();
       clearInterval(intervalo);
     };
-  }, [carregarDados]);
+  }, [carregarDadosPedidos, carregarDadosMesas]);
 
   // Alternar som
   function handleToggleSom() {
@@ -152,15 +190,27 @@ function TelaGarcom() {
     exibirToast("Teste de alerta sonoro reproduzido!", "info");
   }
 
-  // Simular novo item pronto (cozinha finalizou)
+  // Simular novo item pronto
   function handleSimularPronto() {
     const novo = simularNovoPedidoPronto();
     setAlertaVisual(novo);
     if (somAtivo) {
       tocarAlertaSonoro();
     }
-    carregarDados();
+    carregarDadosPedidos();
     exibirToast(`Novo item pronto simulado: Mesa ${novo.mesa} - ${novo.nomeItem}`, "sucesso");
+  }
+
+  // Simular solicitação de fechamento pelo cliente (RF05)
+  function handleSimularChamadoCliente() {
+    const mesaAtualizada = simularSolicitacaoFechamentoCliente(7);
+    if (mesaAtualizada) {
+      if (somAtivo) {
+        tocarAlertaSonoro();
+      }
+      carregarDadosMesas();
+      exibirToast("Mesa 7 solicitou fechamento da conta pelo autoatendimento (RF05)!", "info");
+    }
   }
 
   // Logout
@@ -175,8 +225,7 @@ function TelaGarcom() {
     try {
       const resposta = await assumirEntrega(idItemPedido, usuario.email, usuario.nome);
       exibirToast(resposta.mensagem, "sucesso");
-      await carregarDados();
-      // Leva o garçom para a aba de entrega ativa
+      await carregarDadosPedidos();
       setAbaAtiva("minha_entrega");
     } catch (erro) {
       exibirToast(erro.message || "Não foi possível assumir a entrega.", "erro");
@@ -191,8 +240,7 @@ function TelaGarcom() {
     try {
       const resposta = await marcarComoEntregue(idItemPedido, usuario.email);
       exibirToast(resposta.mensagem, "sucesso");
-      await carregarDados();
-      // Volta para os pedidos prontos disponíveis
+      await carregarDadosPedidos();
       setAbaAtiva("prontos");
     } catch (erro) {
       exibirToast(erro.message || "Erro ao marcar como entregue.", "erro");
@@ -201,7 +249,85 @@ function TelaGarcom() {
     }
   }
 
+  // Ações de Pagamento e Fechamento (RF13, RF14, RF15, RF16)
+  async function handleAplicarDesconto(numeroMesa, dadosDesconto) {
+    setCarregandoAcao(true);
+    try {
+      const res = await aplicarDesconto(numeroMesa, {
+        ...dadosDesconto,
+        garcom: usuario.nome || usuario.email,
+      });
+      exibirToast(res.mensagem, "sucesso");
+      await carregarDadosMesas();
+    } catch (err) {
+      exibirToast(err.message, "erro");
+      throw err;
+    } finally {
+      setCarregandoAcao(false);
+    }
+  }
+
+  async function handleRemoverDesconto(numeroMesa) {
+    setCarregandoAcao(true);
+    try {
+      const res = await removerDesconto(numeroMesa);
+      exibirToast(res.mensagem, "info");
+      await carregarDadosMesas();
+    } catch (err) {
+      exibirToast(err.message, "erro");
+    } finally {
+      setCarregandoAcao(false);
+    }
+  }
+
+  async function handleRegistrarPagamento(numeroMesa, dadosPagamento) {
+    setCarregandoAcao(true);
+    try {
+      const res = await registrarPagamento(numeroMesa, {
+        ...dadosPagamento,
+        garcom: usuario.nome || usuario.email,
+      });
+      exibirToast(res.mensagem, "sucesso");
+      await carregarDadosMesas();
+    } catch (err) {
+      exibirToast(err.message, "erro");
+      throw err;
+    } finally {
+      setCarregandoAcao(false);
+    }
+  }
+
+  async function handleRemoverPagamento(numeroMesa, idPagamento) {
+    setCarregandoAcao(true);
+    try {
+      const res = await removerPagamento(numeroMesa, idPagamento);
+      exibirToast(res.mensagem, "info");
+      await carregarDadosMesas();
+    } catch (err) {
+      exibirToast(err.message, "erro");
+    } finally {
+      setCarregandoAcao(false);
+    }
+  }
+
+  async function handleEncerrarConta(numeroMesa) {
+    setCarregandoAcao(true);
+    try {
+      const res = await encerrarConta(numeroMesa, usuario.nome || usuario.email);
+      setReciboFechamento(res.recibo);
+      exibirToast(res.mensagem, "sucesso");
+      setMesaSelecionadaNumero(null);
+      await carregarDadosMesas();
+    } catch (err) {
+      exibirToast(err.message, "erro");
+    } finally {
+      setCarregandoAcao(false);
+    }
+  }
+
   const entregaEmAndamento = minhasEntregas.length > 0 ? minhasEntregas[0] : null;
+  const mesaAtiva = mesas.find((m) => m.numeroMesa === mesaSelecionadaNumero);
+  const mesasSolicitandoFechamento = mesas.filter((m) => m.status === "aberta" && m.solicitouFechamento);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-[#F9ECE5] via-[#f3e5dd] to-[#e8ded7] text-gray-800 pb-20">
@@ -246,6 +372,34 @@ function TelaGarcom() {
 
       {/* Conteúdo Principal */}
       <main className="max-w-md mx-auto px-4 pt-4">
+        {/* Banner de Chamado do Cliente pelo Autoatendimento (RF05) se estiver em outra aba */}
+        {mesasSolicitandoFechamento.length > 0 && abaAtiva !== "contas" && (
+          <div
+            onClick={() => {
+              setAbaAtiva("contas");
+              setMesaSelecionadaNumero(mesasSolicitandoFechamento[0].numeroMesa);
+            }}
+            className="mb-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 p-3 rounded-2xl shadow-md flex items-center justify-between cursor-pointer transition animate-bounce-slow"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 bg-black/15 rounded-xl">
+                <MdNotificationsActive size={20} />
+              </span>
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider block leading-tight">
+                  Chamado de Fechamento (RF05)
+                </span>
+                <span className="text-xs font-bold leading-tight">
+                  Mesa {mesasSolicitandoFechamento[0].numeroMesa} solicitou a conta
+                </span>
+              </div>
+            </div>
+            <span className="text-xs font-black bg-slate-950 text-white px-2.5 py-1 rounded-lg">
+              Atender
+            </span>
+          </div>
+        )}
+
         {/* Banner de Aviso de Entrega em Andamento quando na aba 'prontos' */}
         {entregaEmAndamento && abaAtiva !== "minha_entrega" && (
           <div
@@ -271,70 +425,89 @@ function TelaGarcom() {
           </div>
         )}
 
-        {/* Barra de Abas / Filtros */}
-        <div className="bg-white/70 backdrop-blur-sm p-1 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-1 mb-4">
+        {/* Barra de Abas / Navegação do Garçom */}
+        <div className="bg-white/80 backdrop-blur-sm p-1 rounded-2xl border border-gray-200/80 shadow-xs grid grid-cols-4 gap-1 mb-4">
+          {/* Aba 1: Prontos */}
           <button
             onClick={() => setAbaAtiva("prontos")}
-            className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-1 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
               abaAtiva === "prontos"
                 ? "bg-[#9C1C0E] text-white shadow-sm"
                 : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
             }`}
           >
-            <MdNotifications size={16} />
-            <span>Prontos</span>
-            {prontos.length > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  abaAtiva === "prontos" ? "bg-white text-[#9C1C0E]" : "bg-[#9C1C0E] text-white"
-                }`}
-              >
-                {prontos.length}
-              </span>
-            )}
+            <div className="relative">
+              <MdNotifications size={16} />
+              {prontos.length > 0 && (
+                <span
+                  className={`absolute -top-1 -right-2 text-[9px] px-1 rounded-full font-black ${
+                    abaAtiva === "prontos" ? "bg-white text-[#9C1C0E]" : "bg-[#9C1C0E] text-white"
+                  }`}
+                >
+                  {prontos.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px]">Prontos</span>
           </button>
 
+          {/* Aba 2: Minha Entrega */}
           <button
             onClick={() => setAbaAtiva("minha_entrega")}
-            className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer relative ${
+            className={`py-2 px-1 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
               abaAtiva === "minha_entrega"
                 ? "bg-[#9C1C0E] text-white shadow-sm"
                 : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
             }`}
           >
-            <MdDeliveryDining size={18} />
-            <span>Minha Entrega</span>
-            {minhasEntregas.length > 0 && (
-              <span className="flex h-2.5 w-2.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </span>
-            )}
+            <div className="relative">
+              <MdDeliveryDining size={18} />
+              {minhasEntregas.length > 0 && (
+                <span className="absolute -top-0.5 -right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              )}
+            </div>
+            <span className="text-[11px]">Entrega</span>
           </button>
 
+          {/* Aba 3: Contas / Fechamento de Mesa (RF14, RF15, RF16) */}
+          <button
+            onClick={() => setAbaAtiva("contas")}
+            className={`py-2 px-1 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 cursor-pointer relative ${
+              abaAtiva === "contas"
+                ? "bg-[#9C1C0E] text-white shadow-sm"
+                : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
+            }`}
+          >
+            <div className="relative">
+              <MdReceiptLong size={17} />
+              {mesasSolicitandoFechamento.length > 0 && (
+                <span className="absolute -top-1 -right-2 bg-amber-500 text-slate-950 text-[9px] px-1 rounded-full font-black animate-pulse">
+                  {mesasSolicitandoFechamento.length}
+                </span>
+              )}
+            </div>
+            <span className="text-[11px]">Contas</span>
+          </button>
+
+          {/* Aba 4: Histórico Entregues */}
           <button
             onClick={() => setAbaAtiva("historico")}
-            className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+            className={`py-2 px-1 rounded-xl text-xs font-bold transition flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
               abaAtiva === "historico"
                 ? "bg-[#9C1C0E] text-white shadow-sm"
                 : "text-gray-600 hover:text-gray-900 hover:bg-white/60"
             }`}
           >
             <MdHistory size={16} />
-            <span>Entregues</span>
-            {entregues.length > 0 && (
-              <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
-                  abaAtiva === "historico" ? "bg-white text-[#9C1C0E]" : "bg-gray-200 text-gray-700"
-                }`}
-              >
-                {entregues.length}
-              </span>
-            )}
+            <span className="text-[11px]">Entregues</span>
           </button>
         </div>
 
-        {/* Visualização de cada Aba */}
+        {/* VISUALIZAÇÃO DE CADA ABA */}
+
         {/* ABA 1: Pedidos Prontos */}
         {abaAtiva === "prontos" && (
           <div className="space-y-3.5">
@@ -420,7 +593,31 @@ function TelaGarcom() {
           </div>
         )}
 
-        {/* ABA 3: Histórico de Entregues */}
+        {/* ABA 3: Contas e Fechamento de Mesas (RF05, RF13, RF14, RF15, RF16) */}
+        {abaAtiva === "contas" && (
+          <div>
+            {mesaAtiva ? (
+              <VisualizacaoContaMesa
+                mesa={mesaAtiva}
+                onVoltar={() => setMesaSelecionadaNumero(null)}
+                onAplicarDesconto={handleAplicarDesconto}
+                onRemoverDesconto={handleRemoverDesconto}
+                onRegistrarPagamento={handleRegistrarPagamento}
+                onRemoverPagamento={handleRemoverPagamento}
+                onEncerrarConta={handleEncerrarConta}
+                carregando={carregandoAcao}
+              />
+            ) : (
+              <ListaMesasAbertas
+                mesas={mesas}
+                onSelecionarMesa={(numero) => setMesaSelecionadaNumero(numero)}
+                onSimularChamadoCliente={handleSimularChamadoCliente}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ABA 4: Histórico de Entregues */}
         {abaAtiva === "historico" && (
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
@@ -451,6 +648,14 @@ function TelaGarcom() {
           </div>
         )}
       </main>
+
+      {/* Modal de Recibo Conclusivo após Encerramento da Conta (RF16) */}
+      {reciboFechamento && (
+        <ModalReciboFechamento
+          recibo={reciboFechamento}
+          onFechar={() => setReciboFechamento(null)}
+        />
+      )}
     </div>
   );
 }
