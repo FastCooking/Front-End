@@ -7,6 +7,7 @@ import {
 function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
+  const [tempoPreparo, setTempoPreparo] = useState("15");
   const [categoria, setCategoria] = useState("");
   const [disponivel, setDisponivel] = useState(true);
   const [erro, setErro] = useState("");
@@ -18,11 +19,13 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
     if (itemEmEdicao) {
       setNome(itemEmEdicao.nome ?? "");
       setPreco(itemEmEdicao.preco ?? "");
+      setTempoPreparo(itemEmEdicao.tempoPreparo ? String(itemEmEdicao.tempoPreparo) : "15");
       setCategoria(itemEmEdicao.categoria ?? "");
       setDisponivel(itemEmEdicao.disponivel ?? true);
     } else {
       setNome("");
       setPreco("");
+      setTempoPreparo("15");
       setCategoria("");
       setDisponivel(true);
     }
@@ -31,6 +34,7 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
   function limparCampos() {
     setNome("");
     setPreco("");
+    setTempoPreparo("15");
     setCategoria("");
     setDisponivel(true);
   }
@@ -47,6 +51,7 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
     const dadosConvertidos = {
       nome: nome.trim(),
       preco: parseFloat(preco),
+      tempoPreparo: parseInt(tempoPreparo || "15", 10),
       categoria: categoria.trim(),
       disponivel,
     };
@@ -91,6 +96,18 @@ function FormularioCardapio({ itemEmEdicao, onSalvarSucesso }) {
         min="0"
         step="0.01"
         placeholder="0,00"
+        required
+      />
+
+      <label htmlFor="tempoPreparo">Tempo de Preparo (minutos)</label>
+      <input
+        id="tempoPreparo"
+        type="number"
+        value={tempoPreparo}
+        onChange={(event) => setTempoPreparo(event.target.value)}
+        min="1"
+        step="1"
+        placeholder="15"
         required
       />
 

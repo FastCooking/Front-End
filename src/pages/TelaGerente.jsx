@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   MdPeople,
@@ -74,6 +74,13 @@ import FormularioFichaTec from "../components/insumos/FormularioFichaTec";
 
 import logo from "../assets/fast cooking logo.png";
 
+const BASE_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+
+function buildWsUrl() {
+  const wsBase = BASE_URL.replace(/^http/, "ws");
+  return `${wsBase}/pedidos/ws`;
+}
+
 function getUserIdFromToken() {
   const token = localStorage.getItem("token");
   if (!token) return null;
@@ -97,9 +104,13 @@ function TelaGerente() {
   // Perfil do Gerente Autenticado
   const [idRestauranteGerente, setIdRestauranteGerente] = useState(null);
 
-  // Mensagens globais
+  // Mensagens globais e loading de ação pontual
   const [mensagemSucesso, setMensagemSucesso] = useState("");
   const [erroGeral, setErroGeral] = useState("");
+  const [itemAtualizandoId, setItemAtualizandoId] = useState(null);
+
+  const wsRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // Estados de Dados Usuários
   const [usuarios, setUsuarios] = useState([]);
@@ -385,18 +396,100 @@ function TelaGerente() {
     };
   }, [abaAtiva, carregarHistorico]);
 
+  const carregarMesasRef = useRef(carregarMesas);
+  const carregarKdsRef = useRef(carregarKds);
+  const carregarHistoricoRef = useRef(carregarHistorico);
+
+  useEffect(() => {
+    carregarMesasRef.current = carregarMesas;
+    carregarKdsRef.current = carregarKds;
+    carregarHistoricoRef.current = carregarHistorico;
+  }, [carregarMesas, carregarKds, carregarHistorico]);
+
+  // Conexão WebSocket para Gerente (Mesas, Pedidos e KDS em tempo real)
+  useEffect(() => {
+    isMountedRef.current = true;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    function conectarWs() {
+      if (wsRef.current) wsRef.current.close();
+
+      try {
+        const ws = new WebSocket(buildWsUrl());
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (!isMountedRef.current) return;
+          ws.send(JSON.stringify({ type: "authenticate", token }));
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMountedRef.current) return;
+          try {
+            const payload = JSON.parse(event.data);
+            if (
+              payload.type === "table.opened" ||
+              payload.type === "table.status_changed" ||
+              payload.type === "order.closed" ||
+              payload.type === "order.created"
+            ) {
+              const idMesa = payload.idMesa || payload.mesa?.idMesa;
+              const novoStatus = payload.status || payload.mesa?.status;
+              if (idMesa && novoStatus) {
+                setMesas((prev) =>
+                  prev.map((m) =>
+                    String(m.idMesa) === String(idMesa) ? { ...m, status: novoStatus } : m
+                  )
+                );
+              }
+              carregarMesasRef.current?.();
+              carregarHistoricoRef.current?.();
+            } else if (
+              payload.type === "item.status_changed" ||
+              payload.type === "kds.updated"
+            ) {
+              carregarKdsRef.current?.();
+            }
+          } catch {
+            // ignore
+          }
+        };
+
+        ws.onclose = () => {
+          if (!isMountedRef.current) return;
+          setTimeout(() => {
+            if (isMountedRef.current) conectarWs();
+          }, 4000);
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+    conectarWs();
+
+    return () => {
+      isMountedRef.current = false;
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, []);
+
   async function handleExcluirMesa(m) {
     const confirmou = window.confirm(
       `Deseja realmente remover a Mesa #${m.numero}? Esta ação não pode ser desfeita.`
     );
     if (!confirmou) return;
 
+    setItemAtualizandoId(m.idMesa);
     try {
       await excluirMesa(m.idMesa);
       dispararSucesso(`Mesa #${m.numero} removida com sucesso!`);
       carregarMesas();
     } catch (err) {
       alert(err.message || "Erro ao remover mesa.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
@@ -413,12 +506,15 @@ function TelaGerente() {
       return;
     }
 
+    setItemAtualizandoId(u.idUsuario);
     try {
       await alterarStatusUsuario(u.idUsuario, !u.status);
       dispararSucesso(`Status de "${u.nome}" atualizado!`);
       carregarUsuarios();
     } catch (err) {
       alert(err.message || "Erro ao alternar status do usuário.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
@@ -434,23 +530,29 @@ function TelaGerente() {
     );
     if (!confirmar) return;
 
+    setItemAtualizandoId(u.idUsuario);
     try {
       await excluirUsuario(u.idUsuario);
       dispararSucesso(`Usuário "${u.nome}" removido com sucesso!`);
       carregarUsuarios();
     } catch (err) {
       alert(err.message || "Erro ao remover usuário.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
   // Ações de Cardápio
   async function handleToggleDisponibilidadeCardapio(item) {
+    setItemAtualizandoId(item.id);
     try {
       await alternarDisponibilidade(item.id, !item.disponivel);
       dispararSucesso(`Disponibilidade de "${item.nome}" alterada!`);
       carregarCardapio();
     } catch (err) {
       alert(err.message || "Não foi possível alterar a disponibilidade do item.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
@@ -458,12 +560,15 @@ function TelaGerente() {
     const confirmar = window.confirm(`Deseja realmente desativar/remover o item "${item.nome}" do cardápio?`);
     if (!confirmar) return;
 
+    setItemAtualizandoId(item.id);
     try {
       await excluirItemCardapio(item.id);
       dispararSucesso(`Item "${item.nome}" desativado do cardápio!`);
       carregarCardapio();
     } catch (err) {
       alert(err.message || "Erro ao desativar item do cardápio.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
@@ -472,12 +577,15 @@ function TelaGerente() {
     const confirmar = window.confirm(`Deseja realmente remover o item "${insumo.nome}" do estoque?`);
     if (!confirmar) return;
 
+    setItemAtualizandoId(id);
     try {
       await excluirInsumo(id);
       dispararSucesso(`Item "${insumo.nome}" removido do estoque!`);
       carregarEstoque();
     } catch (err) {
-      alert(err.message || "Erro ao remover item do estoque.");
+      alert(err.message || "Erro ao remover insumo.");
+    } finally {
+      setItemAtualizandoId(null);
     }
   }
 
@@ -895,7 +1003,7 @@ function TelaGerente() {
 
                               <button
                                 onClick={() => handleToggleStatusUsuario(u)}
-                                disabled={isHighRole}
+                                disabled={isHighRole || itemAtualizandoId === u.idUsuario}
                                 className={`p-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                                   u.status
                                     ? "text-green-600 hover:text-red-600 hover:bg-red-50"
@@ -903,7 +1011,13 @@ function TelaGerente() {
                                 }`}
                                 title={isHighRole ? "Apenas o Administrador pode desativar Gerentes" : u.status ? "Desativar Usuário" : "Ativar Usuário"}
                               >
-                                {u.status ? <MdToggleOn size={22} /> : <MdToggleOff size={22} />}
+                                {itemAtualizandoId === u.idUsuario ? (
+                                  <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                ) : u.status ? (
+                                  <MdToggleOn size={22} />
+                                ) : (
+                                  <MdToggleOff size={22} />
+                                )}
                               </button>
 
                               <button
@@ -1077,22 +1191,34 @@ function TelaGerente() {
 
                             <button
                               onClick={() => handleToggleDisponibilidadeCardapio(item)}
-                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              disabled={itemAtualizandoId === item.id}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50 ${
                                 item.disponivel
                                   ? "text-green-600 hover:text-red-600 hover:bg-red-50"
                                   : "text-red-600 hover:text-green-600 hover:bg-green-50"
                               }`}
                               title={item.disponivel ? "Desativar Item" : "Item Desativado"}
                             >
-                              {item.disponivel ? <MdToggleOn size={22} /> : <MdToggleOff size={22} />}
+                              {itemAtualizandoId === item.id ? (
+                                <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                              ) : item.disponivel ? (
+                                <MdToggleOn size={22} />
+                              ) : (
+                                <MdToggleOff size={22} />
+                              )}
                             </button>
 
                             <button
                               onClick={() => handleExcluirCardapio(item)}
-                              className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                              disabled={itemAtualizandoId === item.id}
+                              className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-50"
                               title="Excluir Item"
                             >
-                              <MdDelete size={18} />
+                              {itemAtualizandoId === item.id ? (
+                                <span className="inline-block w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <MdDelete size={18} />
+                              )}
                             </button>
                           </div>
                         </td>

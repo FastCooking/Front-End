@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { MdPerson, MdVisibility, MdVisibilityOff } from "react-icons/md";
+import { MdPerson, MdVisibility, MdVisibilityOff, MdCheckCircle, MdRadioButtonUnchecked } from "react-icons/md";
 import { criarUsuario } from "../../services/usuarioService";
 import { formatarCPF } from "../../utils/formatters";
+import { validarSenhaForte, checarCriteriosSenha } from "../../utils/validacaoSenha";
 
 function ModalNovoUsuario({
   restaurantes,
@@ -54,8 +55,9 @@ function ModalNovoUsuario({
       return;
     }
 
-    if (senha.length < 6) {
-      setErro("A senha deve ter no mínimo 6 caracteres.");
+    const erroSenha = validarSenhaForte(senha);
+    if (erroSenha) {
+      setErro(erroSenha);
       return;
     }
 
@@ -197,17 +199,17 @@ function ModalNovoUsuario({
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Senha de Acesso <span className="text-[#9C1C0E]">*</span> (mínimo 6 caracteres, máx 128)
+              Senha de Acesso <span className="text-[#9C1C0E]">*</span> (mínimo 8 caracteres, letras e números)
             </label>
             <div className="relative">
               <input
                 type={mostrarSenha ? "text" : "password"}
                 required
-                minLength={6}
+                minLength={8}
                 maxLength={128}
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
-                placeholder="Senha inicial"
+                placeholder="Senha inicial forte"
                 className="w-full border border-gray-300 rounded-lg p-2 pr-10 text-sm focus:border-[#9C1C0E] focus:outline-none"
               />
               <button
@@ -218,6 +220,28 @@ function ModalNovoUsuario({
                 {mostrarSenha ? <MdVisibilityOff size={18} /> : <MdVisibility size={18} />}
               </button>
             </div>
+
+            {/* Checklist de critérios de senha forte */}
+            {(() => {
+              const criterios = checarCriteriosSenha(senha);
+              return (
+                <div className="mt-2 p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1">
+                  <span className="font-semibold text-gray-600 block mb-0.5">Critérios de segurança:</span>
+                  <div className={`flex items-center gap-1.5 ${criterios.temMinimo8 ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
+                    {criterios.temMinimo8 ? <MdCheckCircle size={14} /> : <MdRadioButtonUnchecked size={14} />}
+                    <span>Mínimo de 8 caracteres</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${criterios.temLetra ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
+                    {criterios.temLetra ? <MdCheckCircle size={14} /> : <MdRadioButtonUnchecked size={14} />}
+                    <span>Pelo menos uma letra</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${criterios.temNumero ? 'text-emerald-700 font-medium' : 'text-gray-400'}`}>
+                    {criterios.temNumero ? <MdCheckCircle size={14} /> : <MdRadioButtonUnchecked size={14} />}
+                    <span>Pelo menos um número</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">

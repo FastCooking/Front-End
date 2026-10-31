@@ -103,6 +103,13 @@ export default function OrderTracking() {
   useEffect(() => {
     if (order?.idMesa || activeOrderId) {
       try {
+        const statusUpper = String(order?.status || '').toUpperCase();
+        const isFinalizado =
+          statusUpper === 'CANCELLED' ||
+          statusUpper === 'CANCELADO' ||
+          statusUpper === 'CLOSED' ||
+          statusUpper === 'FECHADO';
+
         const anterior = getStorageMesa() || {};
         sessionStorage.setItem(
           'fastcooking_mesa_cliente',
@@ -111,7 +118,7 @@ export default function OrderTracking() {
             ...(order?.idMesa ? { idMesa: order.idMesa } : {}),
             ...(order?.idRestaurante ? { idRestaurante: order.idRestaurante } : {}),
             ...(order?.tableNumber ? { numero: order.tableNumber } : {}),
-            ...(activeOrderId ? { idPedidoAtivo: activeOrderId } : {}),
+            idPedidoAtivo: isFinalizado ? null : activeOrderId,
           })
         );
       } catch (err) {

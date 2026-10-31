@@ -184,7 +184,10 @@ export default function TelaAutoatendimento() {
               status: statusPed,
               itens: comandaAtiva.itens || [],
             });
-            if (!idPedAtivo) idPedAtivo = idPed;
+            idPedAtivo = idPed;
+          } else {
+            idPedAtivo = null;
+            if (ativo) setPedidoAtivoInfo(null);
           }
         }
 
@@ -307,6 +310,10 @@ export default function TelaAutoatendimento() {
           });
           setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: idPed }));
           salvarSessaoMesa({ idMesa: mesaInfo.idMesa, idPedidoAtivo: idPed });
+        } else {
+          setPedidoAtivoInfo(null);
+          setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: null }));
+          salvarSessaoMesa({ idMesa: mesaInfo.idMesa, idPedidoAtivo: null });
         }
       } catch (err) {
         console.warn("Erro ao sincronizar comanda da mesa:", err);
@@ -465,6 +472,7 @@ export default function TelaAutoatendimento() {
       setCarrinho([]);
       setExibirResumoPedido(false);
       setMsgSucesso("✅ Pedido enviado com sucesso para a cozinha! Redirecionando para o acompanhamento...");
+      setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: pedidoId }));
       salvarSessaoMesa({
         idMesa: mesaInfo.idMesa,
         idPedidoAtivo: pedidoId,

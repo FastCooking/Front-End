@@ -14,6 +14,7 @@ import {
 function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
   const [nome, setNome] = useState("");
   const [preco, setPreco] = useState("");
+  const [tempoPreparo, setTempoPreparo] = useState("15");
   const [categoria, setCategoria] = useState("Pratos Principais");
   const [descricao, setDescricao] = useState("");
   const [disponivel, setDisponivel] = useState(true);
@@ -78,6 +79,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     if (item) {
       setNome(item.nome || "");
       setPreco(item.preco ? String(item.preco) : "");
+      setTempoPreparo(item.tempoPreparo ? String(item.tempoPreparo) : "15");
       setCategoria(item.categoria || "Pratos Principais");
       setDescricao(item.descricao || "");
       setDisponivel(item.disponivel !== undefined ? item.disponivel : true);
@@ -126,7 +128,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     e.preventDefault();
     setErro("");
 
-    if (!nome.trim() || !preco || !categoria.trim()) {
+    if (!nome.trim() || !preco || !categoria.trim() || !tempoPreparo) {
       setErro("Preencha todos os campos obrigatórios (*).");
       return;
     }
@@ -137,12 +139,19 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       return;
     }
 
+    const valorTempo = parseInt(tempoPreparo, 10);
+    if (isNaN(valorTempo) || valorTempo <= 0) {
+      setErro("O tempo de preparo deve ser um número inteiro em minutos maior que zero.");
+      return;
+    }
+
     setCarregando(true);
 
     try {
       const dadosItem = {
         nome: nome.trim(),
         preco: valorPreco,
+        tempoPreparo: valorTempo,
         categoria: categoria.trim(),
         descricao: descricao.trim() || null,
         pathImage: pathImage || null,
@@ -275,7 +284,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">
                 Preço (R$) <span className="text-[#9C1C0E]">*</span>
@@ -288,6 +297,22 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
                 value={preco}
                 onChange={(e) => setPreco(e.target.value)}
                 placeholder="0,00"
+                className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Tempo de Preparo (min) <span className="text-[#9C1C0E]">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min="1"
+                step="1"
+                value={tempoPreparo}
+                onChange={(e) => setTempoPreparo(e.target.value)}
+                placeholder="15"
                 className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none"
               />
             </div>

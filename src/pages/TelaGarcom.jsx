@@ -51,6 +51,7 @@ export default function TelaGarcom() {
   const [statusConexao, setStatusConexao] = useState('CONECTANDO');
   const [usuario, setUsuario] = useState(null);
   const [processando, setProcessando] = useState(false);
+  const [itemEmAtualizacao, setItemEmAtualizacao] = useState(null);
 
   // Modais de detalhe e ação
   const [comandaModal, setComandaModal] = useState(null);
@@ -72,6 +73,7 @@ export default function TelaGarcom() {
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
   const ultimosChamadosIdsRef = useRef(new Set());
+  const carregarMesasRef = useRef(null);
 
   // Autenticação e RBAC
   useEffect(() => {
@@ -140,6 +142,10 @@ export default function TelaGarcom() {
   }, [usuario]);
 
   // Carregamento inicial e Polling de 5 segundos para chamados
+  useEffect(() => {
+    carregarMesasRef.current = carregarMesas;
+  }, [carregarMesas]);
+
   useEffect(() => {
     carregarMesas();
     carregarChamados();
@@ -222,6 +228,25 @@ export default function TelaGarcom() {
               prev.filter((c) => c.idMesa !== mesaChamada.idMesa)
             );
             ultimosChamadosIdsRef.current.delete(mesaChamada.idMesa);
+          }
+
+          // Atualizações de status das mesas e pedidos em tempo real
+          if (
+            payload.type === 'table.opened' ||
+            payload.type === 'table.status_changed' ||
+            payload.type === 'order.closed' ||
+            payload.type === 'order.created'
+          ) {
+            const idMesa = payload.idMesa || payload.mesa?.idMesa;
+            const novoStatus = payload.status || payload.mesa?.status;
+            if (idMesa && novoStatus) {
+              setMesas((prev) =>
+                prev.map((m) =>
+                  String(m.idMesa) === String(idMesa) ? { ...m, status: novoStatus } : m
+                )
+              );
+            }
+            carregarMesasRef.current?.();
           }
         } catch {
           // ignore
@@ -308,7 +333,19 @@ export default function TelaGarcom() {
             mensagem: `Mesa #${numeroMesa} aberta com sucesso!`,
             tipo: 'sucesso',
           });
+          setMesas((prev) =>
+            prev.map((m) =>
+              String(m.idMesa) === String(idMesa) ? { ...m, status: 'Indisponivel' } : m
+            )
+          );
           carregarMesas();
+          const mesaAtual = {
+            idMesa,
+            numero: numeroMesa,
+            status: 'Indisponivel',
+            idRestaurante: usuario?.idRestaurante,
+          };
+          handleVerComanda(mesaAtual);
         } catch (err) {
           setAlerta({
             aberto: true,
@@ -372,6 +409,7 @@ export default function TelaGarcom() {
         tipo: 'perigo',
         textoConfirmar: 'Sim, Cancelar Item',
         onConfirmar: async () => {
+          setItemEmAtualizacao(item.idItemPedido);
           setProcessando(true);
           try {
             await cancelarItemPedido(item.idItemPedido);
@@ -393,6 +431,7 @@ export default function TelaGarcom() {
               tipo: 'erro',
             });
           } finally {
+            setItemEmAtualizacao(null);
             setProcessando(false);
           }
         },
@@ -400,6 +439,7 @@ export default function TelaGarcom() {
       return;
     }
 
+    setItemEmAtualizacao(item.idItemPedido);
     setProcessando(true);
     try {
       const res = await alterarQuantidadeItem(item.idItemPedido, novaQuantidade);
@@ -422,6 +462,7 @@ export default function TelaGarcom() {
         tipo: 'erro',
       });
     } finally {
+      setItemEmAtualizacao(null);
       setProcessando(false);
     }
   }
@@ -435,6 +476,7 @@ export default function TelaGarcom() {
       tipo: 'perigo',
       textoConfirmar: 'Cancelar Item',
       onConfirmar: async () => {
+        setItemEmAtualizacao(item.idItemPedido);
         setProcessando(true);
         try {
           await cancelarItemPedido(item.idItemPedido);
@@ -462,6 +504,7 @@ export default function TelaGarcom() {
             tipo: 'erro',
           });
         } finally {
+          setItemEmAtualizacao(null);
           setProcessando(false);
         }
       },
@@ -856,7 +899,12 @@ export default function TelaGarcom() {
 
                       {/* Controle de Quantidade e Cancelamento para itens Pendentes */}
                       <div className="flex items-center gap-2 shrink-0">
-                        {podeEditarQtd ? (
+                        {itemEmAtualizacao === item.idItemPedido ? (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium py-1 px-2 bg-gray-50 rounded-xl">
+                            <span className="w-3.5 h-3.5 border-2 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-[11px]">Atualizando...</span>
+                          </div>
+                        ) : podeEditarQtd ? (
                           <>
                             <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-xl border border-gray-200">
                               <button
@@ -931,13 +979,6 @@ export default function TelaGarcom() {
                     <span>Pagamento & Fechamento</span>
                   </button>
                 )}
-
-                <button
-                  onClick={() => setComandaModal(null)}
-                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs sm:text-sm font-bold px-4 py-2.5 rounded-2xl transition-all cursor-pointer"
-                >
-                  Fechar
-                </button>
               </div>
             </div>
           </div>
