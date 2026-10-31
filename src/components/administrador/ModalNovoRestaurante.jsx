@@ -8,6 +8,7 @@ import {
   formatarCEP,
   formatarCPF,
 } from "../../utils/formatters";
+import { validarSenhaForte } from "../../utils/validacaoSenha";
 
 function ModalNovoRestaurante({ onClose, onSuccess }) {
   // Dados do restaurante
@@ -63,8 +64,9 @@ function ModalNovoRestaurante({ onClose, onSuccess }) {
       return;
     }
 
-    if (senha.length < 6) {
-      setErro("A senha deve ter no mínimo 6 caracteres.");
+    const erroSenha = validarSenhaForte(senha);
+    if (erroSenha) {
+      setErro(erroSenha);
       return;
     }
 
