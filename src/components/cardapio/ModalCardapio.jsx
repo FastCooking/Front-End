@@ -12,17 +12,32 @@ import {
 } from "../../services/fichaTecnicaService";
 
 function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
-  const [nome, setNome] = useState("");
-  const [preco, setPreco] = useState("");
-  const [tempoPreparo, setTempoPreparo] = useState("15");
-  const [categoria, setCategoria] = useState("Pratos Principais");
-  const [descricao, setDescricao] = useState("");
-  const [disponivel, setDisponivel] = useState(true);
+  const itemId = item?.idCardapio || item?.id;
+  const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
+
+  const [nome, setNome] = useState(item?.nome || "");
+  const [preco, setPreco] = useState(
+    item?.preco !== undefined && item?.preco !== null ? String(item.preco) : ""
+  );
+  const [tempoPreparo, setTempoPreparo] = useState(
+    item?.tempoPreparo !== undefined && item?.tempoPreparo !== null
+      ? String(item.tempoPreparo)
+      : "15"
+  );
+  const [categoria, setCategoria] = useState(item?.categoria || "Pratos Principais");
+  const [descricao, setDescricao] = useState(item?.descricao || "");
+  const [disponivel, setDisponivel] = useState(
+    item?.disponivel !== undefined ? item.disponivel : (item?.status !== undefined ? item.status : true)
+  );
 
   // Estado da foto
-  const [pathImage, setPathImage] = useState("");
+  const [pathImage, setPathImage] = useState(item?.pathImage || "");
   const [arquivoImagem, setArquivoImagem] = useState(null);
-  const [previewImagem, setPreviewImagem] = useState("");
+  const [previewImagem, setPreviewImagem] = useState(
+    item?.pathImage
+      ? (item.pathImage.startsWith("http") ? item.pathImage : `${API_BASE}${item.pathImage}`)
+      : ""
+  );
 
   // Estado dos insumos (Ficha Técnica do Prato)
   const [insumosEstoque, setInsumosEstoque] = useState([]);
@@ -40,8 +55,6 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     "Outros",
   ];
 
-  const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
-
   // 1. Carregar Insumos de Estoque e Ficha Técnica Existente
   useEffect(() => {
     async function carregarInsumosE_Ficha() {
@@ -49,9 +62,9 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
         const insumosData = await buscarInsumos().catch(() => []);
         setInsumosEstoque(insumosData || []);
 
-        if (item && item.id) {
+        if (itemId) {
           try {
-            const ficha = await buscarFichaTecnicaCompleta(item.id);
+            const ficha = await buscarFichaTecnicaCompleta(itemId);
             if (ficha && Array.isArray(ficha.insumos)) {
               setInsumosPrato(
                 ficha.insumos.map((i) => ({
@@ -70,19 +83,23 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     }
 
     carregarInsumosE_Ficha();
-  }, [item]);
+  }, [itemId]);
 
-  // 2. Preencher formulário ao editar item (Ajuste de estado na renderização)
-  const [prevItem, setPrevItem] = useState(item);
-  if (item !== prevItem) {
-    setPrevItem(item);
+  // 2. Preencher formulário ao mudar item selecionado
+  useEffect(() => {
     if (item) {
       setNome(item.nome || "");
-      setPreco(item.preco ? String(item.preco) : "");
-      setTempoPreparo(item.tempoPreparo ? String(item.tempoPreparo) : "15");
+      setPreco(item.preco !== undefined && item.preco !== null ? String(item.preco) : "");
+      setTempoPreparo(
+        item.tempoPreparo !== undefined && item.tempoPreparo !== null
+          ? String(item.tempoPreparo)
+          : "15"
+      );
       setCategoria(item.categoria || "Pratos Principais");
       setDescricao(item.descricao || "");
-      setDisponivel(item.disponivel !== undefined ? item.disponivel : true);
+      setDisponivel(
+        item.disponivel !== undefined ? item.disponivel : (item.status !== undefined ? item.status : true)
+      );
       setPathImage(item.pathImage || "");
       if (item.pathImage) {
         setPreviewImagem(
@@ -93,8 +110,9 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       } else {
         setPreviewImagem("");
       }
+      setArquivoImagem(null);
     }
-  }
+  }, [item, API_BASE]);
 
   // Handler de alteração do arquivo de imagem
   function handleImageChange(e) {
@@ -163,13 +181,13 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       }
 
       let resItem;
-      if (item && item.id) {
-        resItem = await atualizarItemCardapio(item.id, dadosItem, arquivoImagem);
+      if (itemId) {
+        resItem = await atualizarItemCardapio(itemId, dadosItem, arquivoImagem);
       } else {
         resItem = await criarItemCardapio(dadosItem, arquivoImagem);
       }
 
-      const idCardapioSalvo = resItem.idCardapio || resItem.id || (item && item.id);
+      const idCardapioSalvo = resItem.idCardapio || resItem.id || itemId;
 
       // Salvar/Atualizar Insumos (Ficha Técnica) do Prato
       if (idCardapioSalvo && insumosPrato.length > 0) {
@@ -209,7 +227,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
         <div className="flex justify-between items-center mb-4 border-b pb-3 border-[#B78A10]/30">
           <h2 className="text-xl font-bold text-[#9C1C0E] flex items-center gap-2">
             <MdRestaurantMenu size={24} />
-            {item ? "Editar Item do Cardápio" : "Novo Item do Cardápio"}
+            {itemId ? "Editar Item do Cardápio" : "Novo Item do Cardápio"}
           </h2>
           <button
             onClick={onClose}
@@ -434,7 +452,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
               disabled={carregando}
               className="px-6 py-2 text-sm rounded-lg bg-[#9C1C0E] text-white hover:bg-[#7a160b] font-semibold cursor-pointer disabled:opacity-50"
             >
-              {carregando ? "Salvando..." : item ? "Salvar Alterações" : "Cadastrar Item"}
+              {carregando ? "Salvando..." : itemId ? "Salvar Alterações" : "Cadastrar Item"}
             </button>
           </div>
         </form>

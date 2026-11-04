@@ -101,6 +101,34 @@ export async function alterarStatusItem(idItemPedido, status) {
   return response.json();
 }
 
+export async function obterFilaEntregasProntas() {
+  const response = await fetch(`${BASE_URL}/pedidos/entregas/fila`, {
+    method: 'GET',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao obter fila de entregas prontas.');
+  }
+
+  return response.json();
+}
+
+export async function concluirEntrega(deliveryOrItemId) {
+  const response = await fetch(`${BASE_URL}/pedidos/entregas/${deliveryOrItemId}/complete`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Erro ao confirmar entrega do item.');
+  }
+
+  return response.json();
+}
+
 export async function liberarSobremesa(idItemPedido) {
   const response = await fetch(`${BASE_URL}/pedidos/itens/${idItemPedido}/liberar-sobremesa`, {
     method: 'PATCH',

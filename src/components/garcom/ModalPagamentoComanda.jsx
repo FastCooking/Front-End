@@ -56,20 +56,20 @@ export default function ModalPagamentoComanda({
     return itens.filter((it) => it.status === 'Pendente');
   }, [itens]);
 
-  const itensEntregues = useMemo(() => {
-    return itens.filter((it) => it.status === 'Entregue');
+  const itensConsumidos = useMemo(() => {
+    return itens.filter((it) => it.status === 'Entregue' || it.status === 'Pronto');
   }, [itens]);
 
-  const nenhumItemEntregue = itensEntregues.length === 0;
+  const nenhumItemConsumido = itensConsumidos.length === 0;
 
-  // Total a pagar é baseado nos itens consumidos/entregues. Se nada foi entregue, total é 0.
+  // Total a pagar é baseado nos itens consumidos (prontos ou entregues). Se nada foi consumido, total é 0.
   const totalPedido = useMemo(() => {
-    if (nenhumItemEntregue) return 0;
-    return itensEntregues.reduce(
+    if (nenhumItemConsumido) return 0;
+    return itensConsumidos.reduce(
       (acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1),
       0
     );
-  }, [itensEntregues, nenhumItemEntregue]);
+  }, [itensConsumidos, nenhumItemConsumido]);
 
   const totalPago = useMemo(() => {
     return pagamentosAnteriores.reduce((acc, p) => acc + (Number(p.valor) || 0), 0);
@@ -94,10 +94,10 @@ export default function ModalPagamentoComanda({
 
   // Divisão por item
   const subtotalItensSelecionados = useMemo(() => {
-    return itensEntregues
+    return itensConsumidos
       .filter((it) => itensSelecionados[it.idItemPedido])
       .reduce((acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1), 0);
-  }, [itensEntregues, itensSelecionados]);
+  }, [itensConsumidos, itensSelecionados]);
 
   function handleToggleItem(idItemPedido) {
     setItensSelecionados((prev) => ({
@@ -238,13 +238,13 @@ export default function ModalPagamentoComanda({
         )}
 
         <div className="flex-1 overflow-y-auto py-3 space-y-4 pr-1">
-          {nenhumItemEntregue ? (
-            /* Caso em que nenhum item foi consumido / entregue */
+          {nenhumItemConsumido ? (
+            /* Caso em que nenhum item foi consumido */
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center text-amber-900 space-y-3">
               <MdWarning className="text-4xl text-[#B78A10] mx-auto" />
-              <h4 className="font-black text-base">Nenhum Item Entregue</h4>
+              <h4 className="font-black text-base">Nenhum Item Consumido</h4>
               <p className="text-xs text-amber-800 leading-relaxed max-w-md mx-auto">
-                Não há itens entregues nesta comanda. Ao prosseguir com o fechamento, os itens pendentes serão cancelados e a mesa será liberada sem nenhum lançamento no histórico financeiro.
+                Nenhum item foi consumido ou entregue nesta mesa (todos estão pendentes). Ao confirmar, os itens pendentes serão cancelados e a mesa será liberada sem cobrança e sem registro no histórico financeiro.
               </p>
               <button
                 type="button"
@@ -255,7 +255,7 @@ export default function ModalPagamentoComanda({
                 {processando && (
                   <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 )}
-                Liberar Mesa & Cancelar Itens Pendentes
+                Liberar Mesa & Cancelar Itens
               </button>
             </div>
           ) : (
@@ -265,7 +265,7 @@ export default function ModalPagamentoComanda({
                 <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded-2xl flex items-center gap-2">
                   <MdWarning className="text-blue-600 shrink-0 text-base" />
                   <span>
-                    Existem {itensPendentes.length} {itensPendentes.length === 1 ? 'item pendente' : 'itens pendentes'}. O fechamento cobrará apenas os itens entregues, e os pendentes serão cancelados automaticamente.
+                    Existem {itensPendentes.length} {itensPendentes.length === 1 ? 'item pendente' : 'itens pendentes'}. O fechamento cobrará apenas os itens consumidos/prontos, e os pendentes serão cancelados automaticamente.
                   </span>
                 </div>
               )}
@@ -273,7 +273,7 @@ export default function ModalPagamentoComanda({
               {/* Card Resumo Financeiro */}
               <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-xs grid grid-cols-3 gap-3 text-center">
                 <div>
-                  <span className="text-[11px] text-gray-500 font-medium">Total Entregue</span>
+                  <span className="text-[11px] text-gray-500 font-medium">Total Consumido</span>
                   <p className="text-sm sm:text-base font-black text-gray-800">
                     R$ {totalPedido.toFixed(2)}
                   </p>

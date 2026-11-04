@@ -19,6 +19,8 @@ import {
 import {
   alterarStatusItem,
   alterarQuantidadeItem,
+  concluirEntrega,
+  obterFilaEntregasProntas,
   listarMesas,
   abrirMesa,
   cancelarItemPedido,
@@ -141,7 +143,29 @@ export default function TelaGarcom() {
     }
   }, [usuario]);
 
-  // Carregamento inicial e Polling de 5 segundos para chamados
+  const carregarPratosProntos = useCallback(async () => {
+    try {
+      const fila = await obterFilaEntregasProntas();
+      if (Array.isArray(fila)) {
+        setPratosProntos(
+          fila.map((it) => ({
+            idItemPedido: it.idItemPedido,
+            deliveryId: it.deliveryId,
+            nomeItem: it.nomeItem || it.nome,
+            quantidade: it.quantidade,
+            numeroMesa: it.numeroMesa,
+            idMesa: it.idMesa,
+            status: it.status || 'Pronto',
+            observacao: it.observacao,
+          }))
+        );
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar fila de pratos prontos:', err);
+    }
+  }, []);
+
+  // Carregamento inicial e Polling de 5 segundos para chamados e pratos prontos
   useEffect(() => {
     carregarMesasRef.current = carregarMesas;
   }, [carregarMesas]);
@@ -149,13 +173,15 @@ export default function TelaGarcom() {
   useEffect(() => {
     carregarMesas();
     carregarChamados();
+    carregarPratosProntos();
 
     const interval = setInterval(() => {
       carregarChamados();
+      carregarPratosProntos();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [carregarMesas, carregarChamados]);
+  }, [carregarMesas, carregarChamados, carregarPratosProntos]);
 
   // Conexão WebSocket para Garçom
   const conectarWs = useCallback(() => {
@@ -210,6 +236,17 @@ export default function TelaGarcom() {
                 ),
               };
             });
+          }
+
+          if (
+            payload.type === 'kds:item_ready' ||
+            payload.type === 'delivery:claimed' ||
+            payload.type === 'queue.updated'
+          ) {
+            carregarPratosProntos();
+            if (payload.type === 'kds:item_ready') {
+              tocarAlertaSonoro();
+            }
           }
 
           // Chamados de mesa em tempo real
@@ -292,8 +329,17 @@ export default function TelaGarcom() {
       onConfirmar: async () => {
         setProcessando(true);
         try {
-          await alterarStatusItem(item.idItemPedido, 'Entregue');
+          await concluirEntrega(item.deliveryId || item.idItemPedido);
           setPratosProntos((prev) => prev.filter((p) => p.idItemPedido !== item.idItemPedido));
+          setComandaModal((prev) => {
+            if (!prev || !prev.itens) return prev;
+            return {
+              ...prev,
+              itens: prev.itens.map((it) =>
+                it.idItemPedido === item.idItemPedido ? { ...it, status: 'Entregue' } : it
+              ),
+            };
+          });
           setConfirmacao({ aberto: false });
           setAlerta({
             aberto: true,
@@ -327,26 +373,14 @@ export default function TelaGarcom() {
         try {
           await abrirMesa(idMesa);
           setConfirmacao({ aberto: false });
-          setAlerta({
-            aberto: true,
-            titulo: 'Mesa Aberta',
-            mensagem: `Mesa #${numeroMesa} aberta com sucesso!`,
-            tipo: 'sucesso',
-          });
           setMesas((prev) =>
             prev.map((m) =>
               String(m.idMesa) === String(idMesa) ? { ...m, status: 'Indisponivel' } : m
             )
           );
           carregarMesas();
-          const mesaAtual = {
-            idMesa,
-            numero: numeroMesa,
-            status: 'Indisponivel',
-            idRestaurante: usuario?.idRestaurante,
-          };
-          handleVerComanda(mesaAtual);
         } catch (err) {
+          setConfirmacao({ aberto: false });
           setAlerta({
             aberto: true,
             titulo: 'Erro ao abrir mesa',
@@ -940,13 +974,38 @@ export default function TelaGarcom() {
                               <MdClose size={16} />
                             </button>
                           </>
+                        ) : item.status === 'Pronto' ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                              ● Pronto p/ Entrega
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                confirmarEntrega({
+                                  idItemPedido: item.idItemPedido,
+                                  nomeItem: item.cardapio?.nome || item.nomeItem || item.nome || 'Prato',
+                                  quantidade: item.quantidade,
+                                  numeroMesa: comandaModal.mesa?.numero || comandaModal.pedido?.idMesa,
+                                })
+                              }
+                              disabled={processando}
+                              className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs cursor-pointer transition-colors"
+                            >
+                              Entregar
+                            </button>
+                          </div>
+                        ) : item.status === 'Entregue' ? (
+                          <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            ✓ Entregue
+                          </span>
                         ) : (
-                          <span className="text-[11px] text-gray-400 italic">
+                          <span className="text-[11px] text-gray-500 font-semibold italic">
                             {item.status === 'Cancelado'
                               ? 'Cancelado'
                               : item.status === 'Em preparo'
-                              ? 'Em preparo'
-                              : 'Entregue'}
+                              ? 'Em preparo na cozinha'
+                              : item.status}
                           </span>
                         )}
                       </div>

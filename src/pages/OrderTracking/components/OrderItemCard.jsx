@@ -7,6 +7,7 @@ import { STATUS_STYLES } from '../types';
  * @param {{ item: import('../types').OrderItem }} props
  */
 export default function OrderItemCard({ item }) {
+  const isCancelled = item.status === 'CANCELLED';
   const styles = STATUS_STYLES[item.status] || STATUS_STYLES.PENDING;
 
   return (
@@ -33,7 +34,7 @@ export default function OrderItemCard({ item }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm sm:text-base font-semibold text-gray-800 truncate">
+          <p className={`text-sm sm:text-base font-semibold truncate ${isCancelled ? 'line-through text-gray-400' : 'text-gray-800'}`}>
             {item.name}
           </p>
           {item.notes && (

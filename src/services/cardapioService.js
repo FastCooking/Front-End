@@ -29,9 +29,11 @@ export async function criarItemCardapio(item, arquivo = null) {
     formData.append("file", arquivo);
     if (item.nome) formData.append("nome", item.nome);
     if (item.preco !== undefined) formData.append("preco", String(item.preco));
+    if (item.tempoPreparo !== undefined) formData.append("tempoPreparo", String(item.tempoPreparo));
     if (item.categoria) formData.append("categoria", item.categoria);
     if (item.descricao) formData.append("descricao", item.descricao);
     if (item.idRestaurante) formData.append("idRestaurante", String(item.idRestaurante));
+    if (item.disponivel !== undefined) formData.append("status", String(item.disponivel));
 
     resposta = await fetch(API_URL, {
       method: "POST",
@@ -66,12 +68,16 @@ export async function atualizarItemCardapio(id, item, arquivo = null) {
     formData.append("file", arquivo);
     if (item.nome) formData.append("nome", item.nome);
     if (item.preco !== undefined) formData.append("preco", String(item.preco));
+    if (item.tempoPreparo !== undefined) formData.append("tempoPreparo", String(item.tempoPreparo));
     if (item.categoria) formData.append("categoria", item.categoria);
     if (item.descricao !== undefined && item.descricao !== null) {
       formData.append("descricao", item.descricao);
     }
     if (item.pathImage !== undefined) {
       formData.append("pathImage", item.pathImage || "");
+    }
+    if (item.disponivel !== undefined) {
+      formData.append("status", String(item.disponivel));
     }
 
     resposta = await fetch(`${API_URL}/${id}`, {

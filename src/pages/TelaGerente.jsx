@@ -335,9 +335,14 @@ function TelaGerente() {
   useEffect(() => {
     let ativo = true;
     if (abaAtiva === "mesas") {
-      Promise.resolve().then(() => {
+      carregarMesas();
+      const intervalId = setInterval(() => {
         if (ativo) carregarMesas();
-      });
+      }, 8000);
+      return () => {
+        ativo = false;
+        clearInterval(intervalId);
+      };
     }
     return () => {
       ativo = false;
@@ -432,7 +437,12 @@ function TelaGerente() {
               payload.type === "table.opened" ||
               payload.type === "table.status_changed" ||
               payload.type === "order.closed" ||
-              payload.type === "order.created"
+              payload.type === "order.created" ||
+              payload.type === "mesa.garcom_chamado" ||
+              payload.type === "mesa.garcom_atendido" ||
+              payload.type === "queue.updated" ||
+              payload.type === "kds:item_ready" ||
+              payload.type === "delivery:claimed"
             ) {
               const idMesa = payload.idMesa || payload.mesa?.idMesa;
               const novoStatus = payload.status || payload.mesa?.status;
@@ -450,6 +460,7 @@ function TelaGerente() {
               payload.type === "kds.updated"
             ) {
               carregarKdsRef.current?.();
+              carregarMesasRef.current?.();
             }
           } catch {
             // ignore
@@ -1856,6 +1867,7 @@ function TelaGerente() {
                           )}
                         </div>
                       </th>
+                      <th className="px-6 py-3 font-semibold">ID Pedido</th>
                       <th
                         onClick={() => alternarOrdenacao("mesa")}
                         className="px-6 py-3 font-semibold cursor-pointer hover:bg-[#ebd5cb] transition-colors"
@@ -1869,8 +1881,6 @@ function TelaGerente() {
                           )}
                         </div>
                       </th>
-                      <th className="px-6 py-3 font-semibold">ID Pedido</th>
-                      <th className="px-6 py-3 font-semibold">Mesa</th>
                       <th className="px-6 py-3 font-semibold">Fechado por</th>
                       <th className="px-6 py-3 font-semibold">Pagamento</th>
                       <th

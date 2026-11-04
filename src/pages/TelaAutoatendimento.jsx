@@ -177,14 +177,18 @@ export default function TelaAutoatendimento() {
           const statusPed = comandaAtiva?.status || comandaAtiva?.pedido?.status;
           const itensValidos = (comandaAtiva?.itens || []).filter((i) => i.status !== "Cancelado");
 
-          if (ativo && comandaAtiva && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado" && itensValidos.length > 0) {
-            setPedidoAtivoInfo({
-              ...comandaAtiva,
-              idPedido: idPed,
-              status: statusPed,
-              itens: comandaAtiva.itens || [],
-            });
+          if (comandaAtiva && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado") {
             idPedAtivo = idPed;
+            if (ativo && itensValidos.length > 0) {
+              setPedidoAtivoInfo({
+                ...comandaAtiva,
+                idPedido: idPed,
+                status: statusPed,
+                itens: comandaAtiva.itens || [],
+              });
+            } else if (ativo) {
+              setPedidoAtivoInfo(null);
+            }
           } else {
             idPedAtivo = null;
             if (ativo) setPedidoAtivoInfo(null);
@@ -301,15 +305,19 @@ export default function TelaAutoatendimento() {
         const statusPed = comanda?.status || comanda?.pedido?.status;
         const itensValidos = (comanda?.itens || []).filter((i) => i.status !== "Cancelado");
 
-        if (comanda && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado" && itensValidos.length > 0) {
-          setPedidoAtivoInfo({
-            ...comanda,
-            idPedido: idPed,
-            status: statusPed,
-            itens: comanda.itens || [],
-          });
+        if (comanda && idPed && statusPed !== "Fechado" && statusPed !== "Cancelado") {
           setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: idPed }));
           salvarSessaoMesa({ idMesa: mesaInfo.idMesa, idPedidoAtivo: idPed });
+          if (itensValidos.length > 0) {
+            setPedidoAtivoInfo({
+              ...comanda,
+              idPedido: idPed,
+              status: statusPed,
+              itens: comanda.itens || [],
+            });
+          } else {
+            setPedidoAtivoInfo(null);
+          }
         } else {
           setPedidoAtivoInfo(null);
           setMesaInfo((prev) => ({ ...prev, idPedidoAtivo: null }));
