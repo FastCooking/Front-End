@@ -15,28 +15,41 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
   const itemId = item?.idCardapio || item?.id;
   const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 
-  const [nome, setNome] = useState(item?.nome || "");
-  const [preco, setPreco] = useState(
-    item?.preco !== undefined && item?.preco !== null ? String(item.preco) : ""
-  );
-  const [tempoPreparo, setTempoPreparo] = useState(
+  const itemNome = item?.nome || item?.name || "";
+  const itemPreco =
+    item?.preco !== undefined && item?.preco !== null
+      ? String(item.preco)
+      : item?.price !== undefined && item?.price !== null
+      ? String(item.price)
+      : "";
+  const itemTempo =
     item?.tempoPreparo !== undefined && item?.tempoPreparo !== null
       ? String(item.tempoPreparo)
-      : "15"
-  );
-  const [categoria, setCategoria] = useState(item?.categoria || "Pratos Principais");
-  const [descricao, setDescricao] = useState(item?.descricao || "");
-  const [disponivel, setDisponivel] = useState(
-    item?.disponivel !== undefined ? item.disponivel : (item?.status !== undefined ? item.status : true)
-  );
+      : item?.tempo_preparo !== undefined && item?.tempo_preparo !== null
+      ? String(item.tempo_preparo)
+      : "15";
+  const itemCategoria = item?.categoria || item?.category || "Pratos Principais";
+  const itemDescricao = item?.descricao || item?.description || "";
+  const itemDisponivel =
+    item?.disponivel !== undefined
+      ? Boolean(item.disponivel)
+      : item?.status !== undefined
+      ? Boolean(item.status)
+      : true;
+  const itemImg = item?.pathImage || item?.imagemUrl || item?.imagem || item?.imagem_url || "";
+
+  const [nome, setNome] = useState(itemNome);
+  const [preco, setPreco] = useState(itemPreco);
+  const [tempoPreparo, setTempoPreparo] = useState(itemTempo);
+  const [categoria, setCategoria] = useState(itemCategoria);
+  const [descricao, setDescricao] = useState(itemDescricao);
+  const [disponivel, setDisponivel] = useState(itemDisponivel);
 
   // Estado da foto
-  const [pathImage, setPathImage] = useState(item?.pathImage || "");
+  const [pathImage, setPathImage] = useState(itemImg);
   const [arquivoImagem, setArquivoImagem] = useState(null);
   const [previewImagem, setPreviewImagem] = useState(
-    item?.pathImage
-      ? (item.pathImage.startsWith("http") ? item.pathImage : `${API_BASE}${item.pathImage}`)
-      : ""
+    itemImg ? (itemImg.startsWith("http") ? itemImg : `${API_BASE}${itemImg}`) : ""
   );
 
   // Estado dos insumos (Ficha Técnica do Prato)
@@ -49,11 +62,51 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
   const CATEGORIAS_PADRAO = [
     "Pratos Principais",
     "Entradas",
-    "Sobremesas",
+    "Lanches",
+    "Pizzas",
     "Bebidas",
+    "Sobremesas",
     "Acompanhamentos",
+    "Porções",
+    "Combos",
     "Outros",
   ];
+
+  // Sincronização direta de estado caso as props mudem durante o ciclo de vida
+  const [prevItem, setPrevItem] = useState(item);
+  if (item !== prevItem) {
+    setPrevItem(item);
+    if (item) {
+      setNome(itemNome);
+      setPreco(itemPreco);
+      setTempoPreparo(itemTempo);
+      setCategoria(itemCategoria);
+      setDescricao(itemDescricao);
+      setDisponivel(itemDisponivel);
+      setPathImage(itemImg);
+      setPreviewImagem(itemImg ? (itemImg.startsWith("http") ? itemImg : `${API_BASE}${itemImg}`) : "");
+      setArquivoImagem(null);
+      if (item.insumos && Array.isArray(item.insumos)) {
+        setInsumosPrato(
+          item.insumos.map((i) => ({
+            idEstoque: String(i.idEstoque || i.id),
+            quantidadeNecessaria: String(i.quantidadeNecessaria || i.quantidade),
+          }))
+        );
+      }
+    } else {
+      setNome("");
+      setPreco("");
+      setTempoPreparo("15");
+      setCategoria("Pratos Principais");
+      setDescricao("");
+      setDisponivel(true);
+      setPathImage("");
+      setPreviewImagem("");
+      setArquivoImagem(null);
+      setInsumosPrato([]);
+    }
+  }
 
   // 1. Carregar Insumos de Estoque e Ficha Técnica Existente
   useEffect(() => {
@@ -65,7 +118,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
         if (itemId) {
           try {
             const ficha = await buscarFichaTecnicaCompleta(itemId);
-            if (ficha && Array.isArray(ficha.insumos)) {
+            if (ficha && Array.isArray(ficha.insumos) && ficha.insumos.length > 0) {
               setInsumosPrato(
                 ficha.insumos.map((i) => ({
                   idEstoque: String(i.idEstoque || i.id),
@@ -74,7 +127,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
               );
             }
           } catch (e) {
-            console.log("Ficha técnica não encontrada para o prato:", e.message);
+            console.log("Ficha técnica não encontrada para o prato:", e?.message);
           }
         }
       } catch (err) {
@@ -85,34 +138,10 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
     carregarInsumosE_Ficha();
   }, [itemId]);
 
-  // 2. Preencher formulário ao mudar item selecionado
-  useEffect(() => {
-    if (item) {
-      setNome(item.nome || "");
-      setPreco(item.preco !== undefined && item.preco !== null ? String(item.preco) : "");
-      setTempoPreparo(
-        item.tempoPreparo !== undefined && item.tempoPreparo !== null
-          ? String(item.tempoPreparo)
-          : "15"
-      );
-      setCategoria(item.categoria || "Pratos Principais");
-      setDescricao(item.descricao || "");
-      setDisponivel(
-        item.disponivel !== undefined ? item.disponivel : (item.status !== undefined ? item.status : true)
-      );
-      setPathImage(item.pathImage || "");
-      if (item.pathImage) {
-        setPreviewImagem(
-          item.pathImage.startsWith("http")
-            ? item.pathImage
-            : `${API_BASE}${item.pathImage}`
-        );
-      } else {
-        setPreviewImagem("");
-      }
-      setArquivoImagem(null);
-    }
-  }, [item, API_BASE]);
+  // Lista dinâmica de categorias garantindo que a categoria atual do item esteja disponível no <select>
+  const listaCategorias = Array.from(
+    new Set([...CATEGORIAS_PADRAO, categoria, itemCategoria].filter(Boolean))
+  );
 
   // Handler de alteração do arquivo de imagem
   function handleImageChange(e) {
@@ -344,7 +373,7 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
                 onChange={(e) => setCategoria(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2 text-sm focus:border-[#9C1C0E] focus:outline-none bg-white"
               >
-                {CATEGORIAS_PADRAO.map((cat) => (
+                {listaCategorias.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat}
                   </option>

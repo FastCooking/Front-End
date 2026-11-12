@@ -2089,6 +2089,7 @@ function TelaGerente() {
       {/* Modal de Cardápio (Segue o mesmo modelo visual do ModalNovoUsuario) */}
       {modalCardapio && (
         <ModalCardapio
+          key={itemCardapioEdicao ? (itemCardapioEdicao.id || itemCardapioEdicao.idCardapio || "edicao") : "novo"}
           item={itemCardapioEdicao}
           idRestaurante={idRestauranteGerente}
           onClose={() => {
