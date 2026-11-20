@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
-import { MdQrCode2, MdDownload, MdPrint, MdLaunch } from "react-icons/md";
+import { useEffect, useState } from "react";
+import { MdDownload, MdLaunch, MdPrint, MdQrCode2 } from "react-icons/md";
 import { obterQrCodeMesaUrl } from "../../services/mesaService";
+import { Button, Modal, Spinner } from "../ui";
 
 export default function ModalQrCodeMesa({ mesa, onClose }) {
   const [qrCodeUrl, setQrCodeUrl] = useState(null);
@@ -11,13 +12,20 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
 
   useEffect(() => {
     let ativo = true;
+    let urlCriada = null;
+
     async function carregar() {
       try {
         setCarregando(true);
         const url = await obterQrCodeMesaUrl(mesa.idMesa);
+        urlCriada = url;
         if (ativo) setQrCodeUrl(url);
       } catch (err) {
-        if (ativo) setErro(err.message || "Não foi possível carregar a imagem do QR Code.");
+        if (ativo) {
+          setErro(
+            err.message || "Não foi possível carregar a imagem do QR Code."
+          );
+        }
       } finally {
         if (ativo) setCarregando(false);
       }
@@ -29,21 +37,22 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
 
     return () => {
       ativo = false;
-      if (qrCodeUrl) {
-        URL.revokeObjectURL(qrCodeUrl);
+      if (urlCriada) {
+        URL.revokeObjectURL(urlCriada);
       }
     };
   }, [mesa]);
 
   function handleImprimir() {
     const janelaImpressao = window.open("", "_blank");
+    if (!janelaImpressao) return;
     janelaImpressao.document.write(`
       <html>
         <head>
           <title>QR Code - Mesa ${mesa.numero}</title>
           <style>
             body {
-              font-family: Arial, sans-serif;
+              font-family: Poppins, Arial, sans-serif;
               display: flex;
               flex-direction: column;
               align-items: center;
@@ -56,7 +65,6 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
               border-radius: 20px;
               padding: 30px;
               text-align: center;
-              box-shadow: 0 4px 15px rgba(0,0,0,0.1);
               max-width: 350px;
             }
             h1 { color: #9C1C0E; margin-bottom: 5px; }
@@ -70,7 +78,7 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
             <h1>FastCooking</h1>
             <h2>MESA #${mesa.numero}</h2>
             <img src="${qrCodeUrl}" alt="QR Code Mesa ${mesa.numero}" />
-            <p>Escaneie a câmera do seu celular para ver o cardápio e fazer seu pedido!</p>
+            <p>Escaneie com a câmera do seu celular para ver o cardápio e fazer seu pedido!</p>
           </div>
           <script>
             window.onload = function() {
@@ -85,71 +93,60 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center animate-fade-in">
-        <div className="flex justify-between items-center mb-3 border-b pb-2 border-gray-100">
-          <h2 className="text-lg font-bold text-[#9C1C0E] flex items-center gap-2">
-            <MdQrCode2 size={24} /> QR Code - Mesa #{mesa.numero}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-700 text-2xl font-bold cursor-pointer"
-          >
-            &times;
-          </button>
+    <Modal
+      open
+      onClose={onClose}
+      title={`QR Code — Mesa #${mesa.numero}`}
+      subtitle="Autoatendimento oficial para pedidos nesta mesa"
+      icon={MdQrCode2}
+      size="sm"
+    >
+      {carregando ? (
+        <div className="py-10 flex justify-center">
+          <Spinner size="lg" label="Gerando QR Code..." />
         </div>
-
-        <p className="text-xs text-gray-500 mb-4">
-          QR Code oficial de autoatendimento para pedidos nesta mesa.
-        </p>
-
-        {carregando ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-3">
-            <div className="w-10 h-10 border-4 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-gray-500 font-medium">Gerando QR Code...</span>
+      ) : erro ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs">
+          {erro}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center text-center">
+          <div className="p-3 bg-white border-2 border-dashed border-gold rounded-2xl mb-4">
+            <img
+              src={qrCodeUrl}
+              alt={`QR Code Mesa ${mesa.numero}`}
+              className="w-56 h-56 object-contain"
+            />
           </div>
-        ) : erro ? (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl text-xs mb-4">
-            {erro}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="p-3 bg-white border-2 border-dashed border-[#B78A10] rounded-2xl shadow-inner mb-4">
-              <img
-                src={qrCodeUrl}
-                alt={`QR Code Mesa ${mesa.numero}`}
-                className="w-56 h-56 object-contain"
-              />
-            </div>
 
+          <a
+            href={urlAutoatendimento}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-brand hover:underline inline-flex items-center gap-1 mb-5 font-semibold"
+          >
+            Testar link de autoatendimento <MdLaunch size={14} />
+          </a>
+
+          <div className="flex gap-2.5 w-full">
             <a
-              href={urlAutoatendimento}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-600 hover:underline flex items-center gap-1 mb-4 font-medium"
+              href={qrCodeUrl}
+              download={`mesa-${mesa.numero}-qrcode.png`}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white hover:bg-brand-soft text-gray-700 hover:text-brand border border-gray-200 rounded-xl text-xs font-semibold transition-colors shadow-xs"
             >
-              Testar link de autoatendimento <MdLaunch size={14} />
+              <MdDownload size={16} /> Baixar
             </a>
-
-            <div className="flex gap-2 w-full">
-              <a
-                href={qrCodeUrl}
-                download={`mesa-${mesa.numero}-qrcode.png`}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-semibold transition-colors shadow-sm cursor-pointer"
-              >
-                <MdDownload size={16} /> Baixar Imagem
-              </a>
-              <button
-                type="button"
-                onClick={handleImprimir}
-                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-[#9C1C0E] hover:bg-[#7a160b] text-white rounded-xl text-xs font-semibold transition-colors shadow-sm cursor-pointer"
-              >
-                <MdPrint size={16} /> Imprimir Cartão
-              </button>
-            </div>
+            <Button
+              size="sm"
+              icon={MdPrint}
+              onClick={handleImprimir}
+              className="flex-1"
+            >
+              Imprimir
+            </Button>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </Modal>
   );
 }
