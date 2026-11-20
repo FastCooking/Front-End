@@ -1,32 +1,29 @@
-import { STATUS_LABELS, STATUS_PROGRESSION } from '../types';
+import { MdCheck, MdClose } from "react-icons/md";
+import { STATUS_LABELS, STATUS_PROGRESSION } from "../types";
 
-/**
- * Barra de progresso horizontal que mostra a evolução do pedido
- * através das etapas: Pendente → Em preparo → Pronto → Entregue.
- *
- * @param {{ status: import('../types').OrderStatus }} props
- */
 export default function OrderProgressBar({ status }) {
   const currentIndex = STATUS_PROGRESSION.indexOf(status);
-  // Se o status não está na progressão (ex: CANCELLED), mostra posição 0
   const activeIndex = currentIndex >= 0 ? currentIndex : 0;
-  const isCancelled = status === 'CANCELLED';
+  const isCancelled = status === "CANCELLED";
 
   return (
-    <div className="w-full" role="progressbar" aria-label="Progresso do pedido" aria-valuenow={activeIndex + 1} aria-valuemin={1} aria-valuemax={STATUS_PROGRESSION.length}>
-      {/* Etapas */}
+    <div
+      className="w-full"
+      role="progressbar"
+      aria-label="Progresso do pedido"
+      aria-valuenow={activeIndex + 1}
+      aria-valuemin={1}
+      aria-valuemax={STATUS_PROGRESSION.length}
+    >
       <div className="flex items-center justify-between relative">
-        {/* Linha de fundo */}
         <div className="absolute top-4 sm:top-5 left-[10%] right-[10%] h-1 bg-gray-200 rounded-full z-0" />
 
-        {/* Linha de progresso ativa */}
         <div
-          className="absolute top-4 sm:top-5 left-[10%] h-1 rounded-full z-[1] transition-all duration-700 ease-out"
+          className={`absolute top-4 sm:top-5 left-[10%] h-1 rounded-full z-[1] transition-all duration-500 ${
+            isCancelled ? "bg-red-500" : "bg-brand"
+          }`}
           style={{
             width: `${(activeIndex / (STATUS_PROGRESSION.length - 1)) * 80}%`,
-            background: isCancelled
-              ? '#ef4444'
-              : 'linear-gradient(90deg, #9C1C0E, #B78A10)',
           }}
         />
 
@@ -35,36 +32,38 @@ export default function OrderProgressBar({ status }) {
           const isCurrent = i === activeIndex && !isCancelled;
 
           return (
-            <div key={step} className="relative z-10 flex flex-col items-center flex-1 px-0.5">
-              {/* Dot/Círculo */}
+            <div
+              key={step}
+              className="relative z-10 flex flex-col items-center flex-1 px-0.5"
+            >
               <div
-                className={`
-                  w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center
-                  transition-all duration-500 shadow-sm
-                  ${isCurrent
-                    ? 'bg-[#9C1C0E] text-white ring-4 ring-[#9C1C0E]/20 scale-105 sm:scale-110'
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors shadow-xs ${
+                  isCancelled
+                    ? "bg-red-500 text-white"
+                    : isCurrent
+                    ? "bg-brand text-white ring-4 ring-brand/20"
                     : isActive
-                      ? 'bg-[#9C1C0E]/80 text-white'
-                      : 'bg-gray-200 text-gray-400'
-                  }
-                  ${isCancelled ? 'bg-red-400 text-white' : ''}
-                `}
+                    ? "bg-brand text-white"
+                    : "bg-gray-200 text-gray-500"
+                }`}
               >
                 {isActive ? (
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
+                  <MdCheck size={18} />
                 ) : (
-                  <span className="text-[11px] sm:text-xs font-bold">{i + 1}</span>
+                  <span className="text-[11px] sm:text-xs font-bold">
+                    {i + 1}
+                  </span>
                 )}
               </div>
 
-              {/* Label */}
               <span
-                className={`
-                  mt-2 text-[10px] sm:text-xs font-semibold text-center leading-tight break-words
-                  ${isCurrent ? 'text-[#9C1C0E]' : isActive ? 'text-gray-700' : 'text-gray-400'}
-                `}
+                className={`mt-2 text-[10px] sm:text-xs font-semibold text-center leading-tight break-words ${
+                  isCurrent
+                    ? "text-brand"
+                    : isActive
+                    ? "text-gray-700"
+                    : "text-gray-400"
+                }`}
               >
                 {STATUS_LABELS[step]}
               </span>
@@ -73,13 +72,10 @@ export default function OrderProgressBar({ status }) {
         })}
       </div>
 
-      {/* Cancelled overlay */}
       {isCancelled && (
         <div className="mt-4 text-center">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-full text-xs sm:text-sm font-semibold">
+            <MdClose size={16} />
             Pedido Cancelado
           </span>
         </div>
