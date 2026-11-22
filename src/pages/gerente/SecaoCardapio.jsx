@@ -211,6 +211,19 @@ export default function SecaoCardapio({
     },
   ];
 
+  const idRestauranteEfetivo = useMemo(() => {
+    if (idRestauranteGerente) return String(idRestauranteGerente);
+    const fromItem = itensCardapio?.find((i) => i.idRestaurante)?.idRestaurante;
+    if (fromItem) return String(fromItem);
+    try {
+      const stored = JSON.parse(localStorage.getItem("user") || "null");
+      if (stored?.idRestaurante) return String(stored.idRestaurante);
+    } catch {
+      // ignore
+    }
+    return "";
+  }, [idRestauranteGerente, itensCardapio]);
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -219,7 +232,11 @@ export default function SecaoCardapio({
         actions={
           <>
             <a
-              href={`/cardapio?idRestaurante=${idRestauranteGerente || ""}`}
+              href={
+                idRestauranteEfetivo
+                  ? `/cardapio?idRestaurante=${encodeURIComponent(idRestauranteEfetivo)}`
+                  : "/cardapio"
+              }
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-brand hover:bg-brand-soft px-3.5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm shadow-xs transition-colors"

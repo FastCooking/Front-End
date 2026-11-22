@@ -48,12 +48,32 @@ function buildWsUrl() {
   return `${wsBase}/pedidos/ws`;
 }
 
-function getUserIdFromToken() {
+function decodeJwtPayload() {
   const token = localStorage.getItem("token");
   if (!token) return null;
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ? String(payload.sub) : null;
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function getUserIdFromToken() {
+  const payload = decodeJwtPayload();
+  return payload?.sub ? String(payload.sub) : null;
+}
+
+function getInitialUserFromStorage() {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
@@ -71,8 +91,15 @@ function TelaGerente() {
     setSearchParams({ secao: novaSecao }, { replace: true });
   }
 
-  const [idRestauranteGerente, setIdRestauranteGerente] = useState(null);
-  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  const [usuarioLogado, setUsuarioLogado] = useState(() =>
+    getInitialUserFromStorage()
+  );
+  const [idRestauranteGerente, setIdRestauranteGerente] = useState(() => {
+    const stored = getInitialUserFromStorage();
+    if (stored?.idRestaurante) return String(stored.idRestaurante);
+    const jwtPayload = decodeJwtPayload();
+    return jwtPayload?.idRestaurante ? String(jwtPayload.idRestaurante) : null;
+  });
 
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);

@@ -94,9 +94,11 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
       if (item.insumos && Array.isArray(item.insumos)) {
         setInsumosPrato(
           item.insumos.map((i) => ({
-            idEstoque: String(i.idEstoque || i.id),
+            idEstoque: String(i.idEstoque || i.id || ""),
+            nome: i.nome || "",
+            unidadeMedida: i.unidadeMedida || "UN",
             quantidadeNecessaria: String(
-              i.quantidadeNecessaria || i.quantidade
+              i.quantidadeNecessaria ?? i.quantidade ?? ""
             ),
           }))
         );
@@ -134,9 +136,11 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
             ) {
               setInsumosPrato(
                 ficha.insumos.map((i) => ({
-                  idEstoque: String(i.idEstoque || i.id),
+                  idEstoque: String(i.idEstoque || i.id || ""),
+                  nome: i.nome || "",
+                  unidadeMedida: i.unidadeMedida || "UN",
                   quantidadeNecessaria: String(
-                    i.quantidadeNecessaria || i.quantidade
+                    i.quantidadeNecessaria ?? i.quantidade ?? ""
                   ),
                 }))
               );
@@ -402,53 +406,72 @@ function ModalCardapio({ item, idRestaurante, onClose, onSuccess }) {
             </Button>
           </div>
 
-          {insumosPrato.map((row, idx) => (
-            <div
-              key={idx}
-              className="flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200/80"
-            >
-              <Select
-                value={row.idEstoque}
-                onChange={(e) =>
-                  updateInsumoLinha(idx, "idEstoque", e.target.value)
-                }
-                className="flex-1 min-w-0 py-1.5 text-xs"
-                required
-              >
-                <option value="">Selecione um insumo do estoque...</option>
-                {insumosEstoque.map((ins) => (
-                  <option
-                    key={ins.idEstoque || ins.id}
-                    value={ins.idEstoque || ins.id}
-                  >
-                    {ins.nome} ({ins.unidadeMedida})
-                  </option>
-                ))}
-              </Select>
-
-              <Input
-                type="number"
-                step="0.001"
-                min="0.001"
-                placeholder="Qtd."
-                value={row.quantidadeNecessaria}
-                onChange={(e) =>
-                  updateInsumoLinha(idx, "quantidadeNecessaria", e.target.value)
-                }
-                className="w-28 min-w-0 py-1.5 text-xs"
-                required
-              />
-
-              <button
-                type="button"
-                onClick={() => removeInsumoLinha(idx)}
-                className="text-gray-400 hover:text-red-600 p-1 cursor-pointer shrink-0"
-                title="Remover insumo"
-              >
-                <MdDelete size={18} />
-              </button>
+          {insumosPrato.length > 0 && (
+            <div className="grid grid-cols-[minmax(0,1fr)_96px_32px] gap-2 px-2 text-[11px] font-semibold text-gray-500">
+              <span>Insumo atribuído</span>
+              <span>Quantidade</span>
+              <span />
             </div>
-          ))}
+          )}
+
+          {insumosPrato.map((row, idx) => {
+            const insumoJaNaLista = insumosEstoque.some(
+              (ins) => String(ins.idEstoque || ins.id) === String(row.idEstoque)
+            );
+            return (
+              <div
+                key={idx}
+                className="grid grid-cols-[minmax(0,1fr)_96px_32px] items-center gap-2 bg-white p-2 rounded-xl border border-gray-200/80"
+              >
+                <Select
+                  value={row.idEstoque}
+                  onChange={(e) =>
+                    updateInsumoLinha(idx, "idEstoque", e.target.value)
+                  }
+                  className="w-full min-w-0 py-1.5 px-2.5 text-xs truncate"
+                  required
+                >
+                  <option value="">Selecione um insumo do estoque...</option>
+                  {!insumoJaNaLista && row.idEstoque && (
+                    <option value={row.idEstoque}>
+                      {row.nome || `Insumo #${String(row.idEstoque).slice(0, 8)}`} (
+                      {row.unidadeMedida || "UN"})
+                    </option>
+                  )}
+                  {insumosEstoque.map((ins) => (
+                    <option
+                      key={ins.idEstoque || ins.id}
+                      value={String(ins.idEstoque || ins.id)}
+                    >
+                      {ins.nome} ({ins.unidadeMedida})
+                    </option>
+                  ))}
+                </Select>
+
+                <Input
+                  type="number"
+                  step="0.001"
+                  min="0.001"
+                  placeholder="Qtd."
+                  value={row.quantidadeNecessaria}
+                  onChange={(e) =>
+                    updateInsumoLinha(idx, "quantidadeNecessaria", e.target.value)
+                  }
+                  className="w-24 py-1.5 px-2.5 text-xs text-center"
+                  required
+                />
+
+                <button
+                  type="button"
+                  onClick={() => removeInsumoLinha(idx)}
+                  className="text-gray-400 hover:text-red-600 p-1 cursor-pointer shrink-0 flex items-center justify-center"
+                  title="Remover insumo"
+                >
+                  <MdDelete size={18} />
+                </button>
+              </div>
+            );
+          })}
 
           {insumosPrato.length === 0 && (
             <p className="text-xs text-gray-500 text-center py-2">

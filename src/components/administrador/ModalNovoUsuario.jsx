@@ -31,6 +31,15 @@ function ModalNovoUsuario({
 
   const [idRestaurante, setIdRestaurante] = useState(() => {
     if (restaurantePreSelecionado) return String(restaurantePreSelecionado);
+    if (travarRestaurante) {
+      try {
+        const stored = JSON.parse(localStorage.getItem("user") || "null");
+        if (stored?.idRestaurante) return String(stored.idRestaurante);
+      } catch {
+        // ignore
+      }
+      return "";
+    }
     return restaurantesDisponiveis.length > 0
       ? String(restaurantesDisponiveis[0].idRestaurante)
       : "";

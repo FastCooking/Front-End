@@ -47,6 +47,36 @@ function buildWsUrl() {
   return `${wsBase}/pedidos/ws`;
 }
 
+function decodeJwtPayload() {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function normalizarItemPronto(it) {
+  return {
+    idItemPedido: it.idItemPedido || it.itemId || it.id,
+    deliveryId: it.deliveryId || null,
+    nomeItem: it.nomeItem || it.itemName || it.nome || "Prato",
+    quantidade: it.quantidade ?? it.quantity ?? 1,
+    numeroMesa: it.numeroMesa ?? it.tableNumber ?? "—",
+    idMesa: it.idMesa || null,
+    status: it.status || "Pronto",
+    observacao: it.observacao ?? it.notes ?? "",
+  };
+}
+
 export default function TelaGarcom() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -59,7 +89,19 @@ export default function TelaGarcom() {
   const [usuario] = useState(() => {
     try {
       const userStr = localStorage.getItem("user");
-      return userStr ? JSON.parse(userStr) : null;
+      const parsed = userStr ? JSON.parse(userStr) : null;
+      const jwtPayload = decodeJwtPayload();
+      if (parsed && !parsed.idRestaurante && jwtPayload?.idRestaurante) {
+        return { ...parsed, idRestaurante: jwtPayload.idRestaurante };
+      }
+      if (!parsed && jwtPayload) {
+        return {
+          idUsuario: jwtPayload.sub,
+          idRestaurante: jwtPayload.idRestaurante,
+          funcao: jwtPayload.funcao,
+        };
+      }
+      return parsed;
     } catch {
       return null;
     }
@@ -134,18 +176,7 @@ export default function TelaGarcom() {
     try {
       const fila = await obterFilaEntregasProntas();
       if (Array.isArray(fila)) {
-        setPratosProntos(
-          fila.map((it) => ({
-            idItemPedido: it.idItemPedido,
-            deliveryId: it.deliveryId,
-            nomeItem: it.nomeItem || it.nome,
-            quantidade: it.quantidade,
-            numeroMesa: it.numeroMesa,
-            idMesa: it.idMesa,
-            status: it.status || "Pronto",
-            observacao: it.observacao,
-          }))
-        );
+        setPratosProntos(fila.map(normalizarItemPronto));
       }
     } catch {
       // Silencia erro transitório
@@ -203,9 +234,11 @@ export default function TelaGarcom() {
           try {
             const payload = JSON.parse(event.data);
 
-            if (payload.type === "item.status_changed" && payload.item) {
-              const item = payload.item;
-              if (item.status === "Pronto") {
+            const eventType = payload.type || payload.event;
+
+            if (eventType === "item.status_changed" && payload.item) {
+              const item = normalizarItemPronto(payload.item);
+              if (payload.item.status === "Pronto") {
                 setPratosProntos((prev) => {
                   const existe = prev.some(
                     (p) => p.idItemPedido === item.idItemPedido
@@ -215,8 +248,8 @@ export default function TelaGarcom() {
                 });
                 tocarAlertaSonoro();
               } else if (
-                item.status === "Entregue" ||
-                item.status === "Cancelado"
+                payload.item.status === "Entregue" ||
+                payload.item.status === "Cancelado"
               ) {
                 setPratosProntos((prev) =>
                   prev.filter((p) => p.idItemPedido !== item.idItemPedido)
@@ -233,7 +266,7 @@ export default function TelaGarcom() {
                   ...prev,
                   itens: prev.itens.map((it) =>
                     it.idItemPedido === item.idItemPedido
-                      ? { ...it, status: item.status }
+                      ? { ...it, status: payload.item.status }
                       : it
                   ),
                 };
@@ -241,12 +274,12 @@ export default function TelaGarcom() {
             }
 
             if (
-              payload.type === "kds:item_ready" ||
-              payload.type === "delivery:claimed" ||
-              payload.type === "queue.updated"
+              eventType === "kds:item_ready" ||
+              eventType === "delivery:claimed" ||
+              eventType === "queue.updated"
             ) {
               carregarPratosProntos();
-              if (payload.type === "kds:item_ready") {
+              if (eventType === "kds:item_ready") {
                 tocarAlertaSonoro();
               }
             }
@@ -338,9 +371,14 @@ export default function TelaGarcom() {
 
     setProcessando(true);
     try {
-      await concluirEntrega(item.deliveryId || item.idItemPedido);
+      const targetId = item.deliveryId || item.idItemPedido || item.itemId;
+      await concluirEntrega(targetId);
       setPratosProntos((prev) =>
-        prev.filter((p) => p.idItemPedido !== item.idItemPedido)
+        prev.filter(
+          (p) =>
+            p.idItemPedido !== item.idItemPedido &&
+            (!item.deliveryId || p.deliveryId !== item.deliveryId)
+        )
       );
       setComandaModal((prev) => {
         if (!prev || !prev.itens) return prev;
@@ -440,7 +478,10 @@ export default function TelaGarcom() {
       setItemEmAtualizacao(item.idItemPedido);
       setProcessando(true);
       try {
-        await cancelarItemPedido(item.idItemPedido);
+        await cancelarItemPedido(
+          item.idItemPedido,
+          "Quantidade reduzida a zero pelo garçom"
+        );
         setComandaModal((prev) => {
           if (!prev) return null;
           return {
@@ -502,7 +543,10 @@ export default function TelaGarcom() {
     setItemEmAtualizacao(item.idItemPedido);
     setProcessando(true);
     try {
-      await cancelarItemPedido(item.idItemPedido);
+      await cancelarItemPedido(
+        item.idItemPedido,
+        "Cancelado pelo garçom no atendimento da mesa"
+      );
       setComandaModal((prev) => {
         if (!prev) return null;
         return {

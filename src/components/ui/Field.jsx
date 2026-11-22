@@ -28,22 +28,35 @@ export function Field({
   );
 }
 
-const baseInputClasses =
-  "w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand focus:ring-2 focus:ring-brand/15 focus:outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-400";
+const baseFieldInteractiveClasses =
+  "bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 focus:border-brand focus:ring-2 focus:ring-brand/15 focus:outline-none transition-colors disabled:bg-gray-50 disabled:text-gray-400";
+
+function resolveWidthClass(className = "") {
+  if (/\b(w-\S+|flex-1|flex-auto|shrink-0)\b/.test(className)) {
+    return "";
+  }
+  return "w-full";
+}
 
 export function Input({ className = "", error, ...props }) {
+  const widthClass = resolveWidthClass(className);
   return (
     <input
-      className={`${baseInputClasses} ${error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""} ${className}`}
+      className={`${widthClass} ${baseFieldInteractiveClasses} ${
+        error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""
+      } ${className}`.trim()}
       {...props}
     />
   );
 }
 
 export function Select({ className = "", error, children, ...props }) {
+  const widthClass = resolveWidthClass(className);
   return (
     <select
-      className={`${baseInputClasses} ${error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""} ${className}`}
+      className={`${widthClass} ${baseFieldInteractiveClasses} ${
+        error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""
+      } ${className}`.trim()}
       {...props}
     >
       {children}
@@ -52,10 +65,13 @@ export function Select({ className = "", error, children, ...props }) {
 }
 
 export function Textarea({ className = "", error, rows = 3, ...props }) {
+  const widthClass = resolveWidthClass(className);
   return (
     <textarea
       rows={rows}
-      className={`${baseInputClasses} ${error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""} ${className}`}
+      className={`${widthClass} ${baseFieldInteractiveClasses} ${
+        error ? "border-red-400 focus:border-red-500 focus:ring-red-100" : ""
+      } ${className}`.trim()}
       {...props}
     />
   );

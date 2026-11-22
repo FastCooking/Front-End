@@ -266,14 +266,6 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigate("/cardapio")}
-              className="hidden sm:inline-flex"
-            >
-              Ver Cardápio Demo
-            </Button>
-            <Button
               variant="soft"
               size="sm"
               onClick={scrollToForm}
@@ -321,14 +313,12 @@ export default function LandingPage() {
                 >
                   Quero Aderir
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  icon={MdRestaurantMenu}
-                  onClick={() => navigate("/cardapio")}
+                <a
+                  href="#how-it-works"
+                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm bg-white text-gray-700 hover:bg-brand-soft hover:text-brand border border-gray-200 shadow-xs transition-colors"
                 >
-                  Testar Autoatendimento
-                </Button>
+                  Saiba Mais
+                </a>
               </div>
 
               <div className="grid grid-cols-3 gap-3 pt-2">

@@ -106,11 +106,25 @@ export async function atualizarItemCardapio(id, item, arquivo = null) {
 }
 
 export async function alternarDisponibilidade(id, disponivel) {
-  if (!disponivel) {
-    return excluirItemCardapio(id);
-  } else {
-    throw new Error("Backend não possui rota para reativar um item desativado.");
+  const resposta = await fetch(`${API_URL}/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+    body: JSON.stringify({ status: Boolean(disponivel) }),
+  });
+
+  if (!resposta.ok) {
+    const erro = await resposta.json().catch(() => ({}));
+    throw new Error(
+      erro.detail || "Erro ao alterar disponibilidade do item do cardápio."
+    );
   }
+
+  const dados = await resposta.json();
+  return {
+    ...dados,
+    id: dados.idCardapio ?? dados.id,
+    disponivel: dados.status ?? dados.disponivel ?? Boolean(disponivel),
+  };
 }
 
 export async function excluirItemCardapio(id) {

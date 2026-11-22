@@ -14,7 +14,7 @@ import {
   MdTableBar,
   MdTimeline,
 } from "react-icons/md";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import CampoPesquisa from "../components/cardapio/CampoPesquisa";
 import FiltroCategorias from "../components/cardapio/FiltroCategorias";
@@ -112,12 +112,38 @@ const PASSOS_INSTRUCOES = [
   },
 ];
 
+function recuperarRestauranteUsuarioLogado() {
+  try {
+    const raw = localStorage.getItem("user");
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed?.idRestaurante) return String(parsed.idRestaurante);
+  } catch {
+    // ignore
+  }
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+    const payload = JSON.parse(atob(padded));
+    return payload?.idRestaurante ? String(payload.idRestaurante) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function TelaAutoatendimento() {
   const [searchParams] = useSearchParams();
+  const { idMesa: idMesaParam } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
 
-  const idMesaQuery = searchParams.get("idMesa");
+  const idMesaQuery = searchParams.get("idMesa") || idMesaParam;
   const mesaQuery = searchParams.get("mesa");
   const numMesaQuery =
     searchParams.get("numMesa") || searchParams.get("numero");
@@ -126,20 +152,37 @@ export default function TelaAutoatendimento() {
   const sessaoIdQuery =
     searchParams.get("sessao_id") || searchParams.get("sessao");
 
+  const temMesaNaUrl = Boolean(idMesaQuery || mesaQuery || numMesaQuery);
   const storageInicial = recuperarSessaoMesa();
+  const usarStorageMesa =
+    !idRestauranteQuery ||
+    temMesaNaUrl ||
+    String(storageInicial?.idRestaurante || "") === String(idRestauranteQuery);
+  const storageValido = usarStorageMesa ? storageInicial : null;
+  const mesaQueryNumerica =
+    mesaQuery !== null && mesaQuery !== "" && !isNaN(Number(mesaQuery))
+      ? mesaQuery
+      : null;
 
   const [mesaInfo, setMesaInfo] = useState({
     numero:
       numMesaQuery ||
-      (!isNaN(mesaQuery) ? mesaQuery : storageInicial?.numero || null),
+      mesaQueryNumerica ||
+      (temMesaNaUrl ? storageValido?.numero || null : null),
     idMesa: isUuid(idMesaQuery)
       ? idMesaQuery
       : isUuid(mesaQuery)
       ? mesaQuery
-      : storageInicial?.idMesa || null,
-    idRestaurante: idRestauranteQuery || storageInicial?.idRestaurante || null,
-    sessao_id: sessaoIdQuery || storageInicial?.sessao_id || null,
-    idPedidoAtivo: storageInicial?.idPedidoAtivo || null,
+      : temMesaNaUrl
+      ? storageValido?.idMesa || null
+      : null,
+    idRestaurante:
+      idRestauranteQuery ||
+      storageValido?.idRestaurante ||
+      recuperarRestauranteUsuarioLogado() ||
+      null,
+    sessao_id: sessaoIdQuery || storageValido?.sessao_id || null,
+    idPedidoAtivo: temMesaNaUrl ? storageValido?.idPedidoAtivo || null : null,
   });
 
   const [produtos, setProdutos] = useState([]);
@@ -179,17 +222,38 @@ export default function TelaAutoatendimento() {
       try {
         setCarregando(true);
         const storageMesa = recuperarSessaoMesa();
-        let idRest = idRestauranteQuery || storageMesa?.idRestaurante || null;
-        let idSessao = sessaoIdQuery || storageMesa?.sessao_id || null;
-        let idPedAtivo = storageMesa?.idPedidoAtivo || null;
+        const temMesaUrl = Boolean(idMesaQuery || mesaQuery || numMesaQuery);
+        const podeUsarStorage =
+          !idRestauranteQuery ||
+          temMesaUrl ||
+          String(storageMesa?.idRestaurante || "") ===
+            String(idRestauranteQuery);
+        const storageEfetivo = podeUsarStorage ? storageMesa : null;
+        const mesaNumUrl =
+          mesaQuery !== null && mesaQuery !== "" && !isNaN(Number(mesaQuery))
+            ? mesaQuery
+            : null;
+
+        let idRest =
+          idRestauranteQuery ||
+          storageEfetivo?.idRestaurante ||
+          recuperarRestauranteUsuarioLogado() ||
+          null;
+        let idSessao = sessaoIdQuery || storageEfetivo?.sessao_id || null;
+        let idPedAtivo = temMesaUrl
+          ? storageEfetivo?.idPedidoAtivo || null
+          : null;
         let numMesa =
           numMesaQuery ||
-          (!isNaN(mesaQuery) ? mesaQuery : storageMesa?.numero || null);
+          mesaNumUrl ||
+          (temMesaUrl ? storageEfetivo?.numero || null : null);
         let targetIdMesa = isUuid(idMesaQuery)
           ? idMesaQuery
           : isUuid(mesaQuery)
           ? mesaQuery
-          : storageMesa?.idMesa || null;
+          : temMesaUrl
+          ? storageEfetivo?.idMesa || null
+          : null;
         let nomeRest = null;
 
         if (!targetIdMesa && numMesa && idRest) {
@@ -279,11 +343,7 @@ export default function TelaAutoatendimento() {
         if (idRest) {
           try {
             const cardapioData = await listarItensCardapio(idRest);
-            if (
-              ativo &&
-              Array.isArray(cardapioData) &&
-              cardapioData.length > 0
-            ) {
+            if (ativo && Array.isArray(cardapioData)) {
               const itensTratados = cardapioData
                 .filter((item) => item.disponivel !== false)
                 .map((item) => ({
