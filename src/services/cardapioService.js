@@ -1,13 +1,15 @@
 import { API_BASE as BASE_URL } from "../config/api";
+import { fetchComAuth, getAuthToken } from "./apiClient";
+
 const API_URL = `${BASE_URL}/cardapio`;
 
-function getAuthHeaders() {
-  const token = localStorage.getItem('token');
+function getBearerHeaderOnly() {
+  const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function listarItensCardapio(idRestaurante) {
-  const query = idRestaurante ? `?idRestaurante=${idRestaurante}` : '';
+  const query = idRestaurante ? `?idRestaurante=${idRestaurante}` : "";
   const resposta = await fetch(`${API_URL}${query}`);
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
@@ -29,21 +31,23 @@ export async function criarItemCardapio(item, arquivo = null) {
     formData.append("file", arquivo);
     if (item.nome) formData.append("nome", item.nome);
     if (item.preco !== undefined) formData.append("preco", String(item.preco));
-    if (item.tempoPreparo !== undefined) formData.append("tempoPreparo", String(item.tempoPreparo));
+    if (item.tempoPreparo !== undefined)
+      formData.append("tempoPreparo", String(item.tempoPreparo));
     if (item.categoria) formData.append("categoria", item.categoria);
     if (item.descricao) formData.append("descricao", item.descricao);
-    if (item.idRestaurante) formData.append("idRestaurante", String(item.idRestaurante));
-    if (item.disponivel !== undefined) formData.append("status", String(item.disponivel));
+    if (item.idRestaurante)
+      formData.append("idRestaurante", String(item.idRestaurante));
+    if (item.disponivel !== undefined)
+      formData.append("status", String(item.disponivel));
 
     resposta = await fetch(API_URL, {
       method: "POST",
-      headers: { ...getAuthHeaders() },
+      headers: { ...getBearerHeaderOnly() },
       body: formData,
     });
   } else {
-    resposta = await fetch(API_URL, {
+    resposta = await fetchComAuth(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(item),
     });
   }
@@ -68,7 +72,8 @@ export async function atualizarItemCardapio(id, item, arquivo = null) {
     formData.append("file", arquivo);
     if (item.nome) formData.append("nome", item.nome);
     if (item.preco !== undefined) formData.append("preco", String(item.preco));
-    if (item.tempoPreparo !== undefined) formData.append("tempoPreparo", String(item.tempoPreparo));
+    if (item.tempoPreparo !== undefined)
+      formData.append("tempoPreparo", String(item.tempoPreparo));
     if (item.categoria) formData.append("categoria", item.categoria);
     if (item.descricao !== undefined && item.descricao !== null) {
       formData.append("descricao", item.descricao);
@@ -82,13 +87,12 @@ export async function atualizarItemCardapio(id, item, arquivo = null) {
 
     resposta = await fetch(`${API_URL}/${id}`, {
       method: "PUT",
-      headers: { ...getAuthHeaders() },
+      headers: { ...getBearerHeaderOnly() },
       body: formData,
     });
   } else {
-    resposta = await fetch(`${API_URL}/${id}`, {
+    resposta = await fetchComAuth(`${API_URL}/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify(item),
     });
   }
@@ -106,9 +110,8 @@ export async function atualizarItemCardapio(id, item, arquivo = null) {
 }
 
 export async function alternarDisponibilidade(id, disponivel) {
-  const resposta = await fetch(`${API_URL}/${id}/status`, {
+  const resposta = await fetchComAuth(`${API_URL}/${id}/status`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
     body: JSON.stringify({ status: Boolean(disponivel) }),
   });
 
@@ -128,12 +131,12 @@ export async function alternarDisponibilidade(id, disponivel) {
 }
 
 export async function excluirItemCardapio(id) {
-  const resposta = await fetch(`${API_URL}/${id}`, {
+  const resposta = await fetchComAuth(`${API_URL}/${id}`, {
     method: "DELETE",
-    headers: { ...getAuthHeaders() },
   });
-  if (!resposta.ok) {
+  if (!resposta.ok && resposta.status !== 204) {
     const erro = await resposta.json().catch(() => ({}));
-    throw new Error(erro.detail || "Erro ao desativar/excluir item do cardápio");
+    throw new Error(erro.detail || "Erro ao excluir item do cardápio");
   }
+  return true;
 }
