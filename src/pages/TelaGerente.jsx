@@ -23,7 +23,7 @@ import { API_BASE } from "../config/api";
 import { listarItensCardapio } from "../services/cardapioService";
 import { buscarInsumos } from "../services/insumosService";
 import { listarMesas } from "../services/mesaService";
-import { listarPedidos, obterFilaKds } from "../services/pedidoService";
+import { listarPedidos, obterFilaCozinha } from "../services/pedidoService";
 import { listarRestaurantes } from "../services/restauranteService";
 import { listarUsuarios, obterUsuarioPorId } from "../services/usuarioService";
 
@@ -120,11 +120,15 @@ function TelaGerente() {
   const [mesas, setMesas] = useState([]);
   const [carregandoMesas, setCarregandoMesas] = useState(false);
 
-  const [filaKds, setFilaKds] = useState([]);
-  const [carregandoKds, setCarregandoKds] = useState(false);
+  const [filaCozinha, setFilaCozinha] = useState([]);
+  const [carregandoCozinha, setCarregandoCozinha] = useState(false);
 
   const [historicoPedidos, setHistoricoPedidos] = useState([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+
+  const jaCarregouMesasRef = useRef(false);
+  const jaCarregouCozinhaRef = useRef(false);
+  const jaCarregouHistoricoRef = useRef(false);
 
   useEffect(() => {
     const funcao = localStorage.getItem("funcao");
@@ -288,27 +292,32 @@ function TelaGerente() {
     };
   }, [abaAtiva, carregarEstoque]);
 
-  const carregarMesas = useCallback(async () => {
-    if (!idRestauranteGerente) return;
-    try {
-      setCarregandoMesas(true);
-      const dados = await listarMesas(idRestauranteGerente);
-      setMesas(dados || []);
-    } catch {
-      // Silencia erro
-    } finally {
-      setCarregandoMesas(false);
-    }
-  }, [idRestauranteGerente]);
+  const carregarMesas = useCallback(
+    async ({ silencioso = false } = {}) => {
+      if (!idRestauranteGerente) return;
+      const exibirLoading = !silencioso && !jaCarregouMesasRef.current;
+      try {
+        if (exibirLoading) setCarregandoMesas(true);
+        const dados = await listarMesas(idRestauranteGerente);
+        setMesas(dados || []);
+        jaCarregouMesasRef.current = true;
+      } catch {
+        // Silencia erro
+      } finally {
+        if (exibirLoading) setCarregandoMesas(false);
+      }
+    },
+    [idRestauranteGerente]
+  );
 
   useEffect(() => {
     let ativo = true;
     if (abaAtiva === "mesas") {
       Promise.resolve().then(() => {
-        if (ativo) carregarMesas();
+        if (ativo) carregarMesas({ silencioso: jaCarregouMesasRef.current });
       });
       const intervalId = setInterval(() => {
-        if (ativo) carregarMesas();
+        if (ativo) carregarMesas({ silencioso: true });
       }, 8000);
       return () => {
         ativo = false;
@@ -320,26 +329,32 @@ function TelaGerente() {
     };
   }, [abaAtiva, carregarMesas]);
 
-  const carregarKds = useCallback(async () => {
-    try {
-      setCarregandoKds(true);
-      const dados = await obterFilaKds();
-      setFilaKds(dados?.items || []);
-    } catch {
-      // Silencia erro
-    } finally {
-      setCarregandoKds(false);
-    }
-  }, []);
+  const carregarFilaCozinha = useCallback(
+    async ({ silencioso = false } = {}) => {
+      const exibirLoading = !silencioso && !jaCarregouCozinhaRef.current;
+      try {
+        if (exibirLoading) setCarregandoCozinha(true);
+        const dados = await obterFilaCozinha();
+        setFilaCozinha(dados?.items || []);
+        jaCarregouCozinhaRef.current = true;
+      } catch {
+        // Silencia erro
+      } finally {
+        if (exibirLoading) setCarregandoCozinha(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     let ativo = true;
     if (abaAtiva === "cozinha") {
       Promise.resolve().then(() => {
-        if (ativo) carregarKds();
+        if (ativo)
+          carregarFilaCozinha({ silencioso: jaCarregouCozinhaRef.current });
       });
       const intervalId = setInterval(() => {
-        if (ativo) carregarKds();
+        if (ativo) carregarFilaCozinha({ silencioso: true });
       }, 10000);
       return () => {
         ativo = false;
@@ -349,29 +364,35 @@ function TelaGerente() {
     return () => {
       ativo = false;
     };
-  }, [abaAtiva, carregarKds]);
+  }, [abaAtiva, carregarFilaCozinha]);
 
-  const carregarHistorico = useCallback(async () => {
-    if (!idRestauranteGerente) return;
-    try {
-      setCarregandoHistorico(true);
-      const dados = await listarPedidos({
-        idRestaurante: idRestauranteGerente,
-        tipo: "historico",
-      });
-      setHistoricoPedidos(dados || []);
-    } catch {
-      // Silencia erro
-    } finally {
-      setCarregandoHistorico(false);
-    }
-  }, [idRestauranteGerente]);
+  const carregarHistorico = useCallback(
+    async ({ silencioso = false } = {}) => {
+      if (!idRestauranteGerente) return;
+      const exibirLoading = !silencioso && !jaCarregouHistoricoRef.current;
+      try {
+        if (exibirLoading) setCarregandoHistorico(true);
+        const dados = await listarPedidos({
+          idRestaurante: idRestauranteGerente,
+          tipo: "historico",
+        });
+        setHistoricoPedidos(dados || []);
+        jaCarregouHistoricoRef.current = true;
+      } catch {
+        // Silencia erro
+      } finally {
+        if (exibirLoading) setCarregandoHistorico(false);
+      }
+    },
+    [idRestauranteGerente]
+  );
 
   useEffect(() => {
     let ativo = true;
     if (abaAtiva === "historico") {
       Promise.resolve().then(() => {
-        if (ativo) carregarHistorico();
+        if (ativo)
+          carregarHistorico({ silencioso: jaCarregouHistoricoRef.current });
       });
     }
     return () => {
@@ -380,14 +401,14 @@ function TelaGerente() {
   }, [abaAtiva, carregarHistorico]);
 
   const carregarMesasRef = useRef(carregarMesas);
-  const carregarKdsRef = useRef(carregarKds);
+  const carregarFilaCozinhaRef = useRef(carregarFilaCozinha);
   const carregarHistoricoRef = useRef(carregarHistorico);
 
   useEffect(() => {
     carregarMesasRef.current = carregarMesas;
-    carregarKdsRef.current = carregarKds;
+    carregarFilaCozinhaRef.current = carregarFilaCozinha;
     carregarHistoricoRef.current = carregarHistorico;
-  }, [carregarMesas, carregarKds, carregarHistorico]);
+  }, [carregarMesas, carregarFilaCozinha, carregarHistorico]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -432,14 +453,14 @@ function TelaGerente() {
                   )
                 );
               }
-              carregarMesasRef.current?.();
-              carregarHistoricoRef.current?.();
+              carregarMesasRef.current?.({ silencioso: true });
+              carregarHistoricoRef.current?.({ silencioso: true });
             } else if (
               payload.type === "item.status_changed" ||
               payload.type === "kds.updated"
             ) {
-              carregarKdsRef.current?.();
-              carregarMesasRef.current?.();
+              carregarFilaCozinhaRef.current?.({ silencioso: true });
+              carregarMesasRef.current?.({ silencioso: true });
             }
           } catch {
             // Ignora payload malformado
@@ -560,9 +581,9 @@ function TelaGerente() {
 
         {abaAtiva === "cozinha" && (
           <SecaoCozinha
-            filaKds={filaKds}
-            carregando={carregandoKds}
-            onRecarregar={carregarKds}
+            filaCozinha={filaCozinha}
+            carregando={carregandoCozinha}
+            onRecarregar={carregarFilaCozinha}
           />
         )}
 

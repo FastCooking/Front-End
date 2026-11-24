@@ -19,10 +19,11 @@ import ModalAdicionarItemCardapio from "../garcom/ModalAdicionarItemCardapio";
 import {
   Button,
   EmptyState,
+  Field,
+  Input,
   Modal,
   Spinner,
   StatusBadge,
-  useConfirm,
   useToast,
 } from "../ui";
 
@@ -32,9 +33,11 @@ export default function ModalComandaMesa({ mesa, onClose }) {
   const [erro, setErro] = useState("");
   const [processandoItem, setProcessandoItem] = useState(null);
   const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false);
+  const [itemParaCancelar, setItemParaCancelar] = useState(null);
+  const [justificativaCancelamento, setJustificativaCancelamento] =
+    useState("");
 
   const toast = useToast();
-  const confirm = useConfirm();
 
   const [agoraMs, setAgoraMs] = useState(0);
   const idMesa = mesa?.idMesa;
@@ -126,9 +129,7 @@ export default function ModalComandaMesa({ mesa, onClose }) {
     }
   }
 
-  async function handleRemoverItem(item) {
-    const nomeItem = item.nomeItem || item.nome || "Item";
-
+  function handleRemoverItem(item) {
     if (item.status === "Em preparo") {
       toast.warning(
         "Este item já está em preparo na cozinha e não pode ser cancelado diretamente."
@@ -136,18 +137,21 @@ export default function ModalComandaMesa({ mesa, onClose }) {
       return;
     }
 
-    const ok = await confirm({
-      title: "Cancelar Item do Pedido",
-      message: `Deseja realmente cancelar "${nomeItem}" (${item.quantidade}x) da Mesa #${mesa.numero}?`,
-      confirmText: "Sim, Cancelar Item",
-      tone: "danger",
-    });
+    setJustificativaCancelamento("");
+    setItemParaCancelar(item);
+  }
 
-    if (!ok) return;
+  async function confirmarCancelamentoItem() {
+    if (!itemParaCancelar) return;
+    const item = itemParaCancelar;
+    const nomeItem = item.nomeItem || item.nome || "Item";
+    const motivoEfetivo =
+      justificativaCancelamento.trim() ||
+      "Cancelado no acompanhamento da comanda da mesa";
 
     setProcessandoItem(item.idItemPedido);
     try {
-      await cancelarItemPedido(item.idItemPedido);
+      await cancelarItemPedido(item.idItemPedido, motivoEfetivo);
       setComanda((prev) => {
         if (!prev) return null;
         return {
@@ -159,6 +163,8 @@ export default function ModalComandaMesa({ mesa, onClose }) {
           ),
         };
       });
+      setItemParaCancelar(null);
+      setJustificativaCancelamento("");
       toast.success(`O item "${nomeItem}" foi cancelado.`);
     } catch (err) {
       toast.error(err.message || "Não foi possível cancelar o item.");
@@ -406,6 +412,69 @@ export default function ModalComandaMesa({ mesa, onClose }) {
           onFechar={() => setModalAdicionarAberto(false)}
           onItensAdicionados={handleItensAdicionados}
         />
+      )}
+
+      {itemParaCancelar && (
+        <Modal
+          open
+          onClose={() => {
+            if (!processandoItem) {
+              setItemParaCancelar(null);
+              setJustificativaCancelamento("");
+            }
+          }}
+          title="Cancelar Item do Pedido"
+          subtitle={`Mesa #${mesa.numero}`}
+          icon={MdClose}
+          size="sm"
+          footer={
+            <div className="w-full flex items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={Boolean(processandoItem)}
+                onClick={() => {
+                  setItemParaCancelar(null);
+                  setJustificativaCancelamento("");
+                }}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                loading={processandoItem === itemParaCancelar.idItemPedido}
+                onClick={confirmarCancelamentoItem}
+              >
+                Confirmar Cancelamento
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+              Deseja cancelar{" "}
+              <strong className="text-gray-900">
+                {itemParaCancelar.quantidade}x{" "}
+                {itemParaCancelar.nomeItem || itemParaCancelar.nome || "Item"}
+              </strong>{" "}
+              da Mesa #{mesa.numero}?
+            </p>
+            <Field
+              label="Justificativa do cancelamento (opcional)"
+              hint="Se deixado em branco, uma justificativa genérica será utilizada."
+            >
+              <Input
+                type="text"
+                placeholder="Ex: Solicitação do cliente..."
+                value={justificativaCancelamento}
+                onChange={(e) => setJustificativaCancelamento(e.target.value)}
+                disabled={Boolean(processandoItem)}
+                maxLength={160}
+              />
+            </Field>
+          </div>
+        </Modal>
       )}
     </>
   );

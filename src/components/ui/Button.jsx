@@ -23,6 +23,7 @@ const SIZES = {
 };
 
 export function Button({
+  as: Component = "button",
   children,
   variant = "primary",
   size = "md",
@@ -35,11 +36,11 @@ export function Button({
 }) {
   const variantClasses = VARIANTS[variant] || VARIANTS.primary;
   const sizeClasses = SIZES[size] || SIZES.md;
+  const isButton = Component === "button";
 
   return (
-    <button
-      type={type}
-      disabled={disabled || loading}
+    <Component
+      {...(isButton ? { type, disabled: disabled || loading } : {})}
       className={`inline-flex items-center justify-center font-semibold transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${variantClasses} ${sizeClasses} ${className}`}
       {...props}
     >
@@ -49,7 +50,7 @@ export function Button({
         Icon && <Icon size={size === "xs" ? 15 : size === "lg" ? 20 : 18} className="shrink-0" />
       )}
       {children}
-    </button>
+    </Component>
   );
 }
 

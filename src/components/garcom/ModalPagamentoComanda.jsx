@@ -2,12 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import {
   MdCalculate,
   MdCheckCircle,
+  MdDelete,
+  MdDiscount,
+  MdLock,
   MdPayment,
   MdPerson,
   MdReceipt,
   MdWarning,
 } from "react-icons/md";
-import { obterPedido, registrarPagamento } from "../../services/pedidoService";
+import {
+  CONFIG_DESCONTO_COMANDA,
+  aplicarDescontoPedido,
+  obterPedido,
+  registrarPagamento,
+  removerDescontoPedido,
+} from "../../services/pedidoService";
 import { Button, Field, Input, Modal, Select } from "../ui";
 
 export default function ModalPagamentoComanda({
@@ -17,8 +26,15 @@ export default function ModalPagamentoComanda({
   itens = [],
   onFechar,
   onSucesso,
+  onPedidoAtualizado,
 }) {
   const [pagamentosAnteriores, setPagamentosAnteriores] = useState([]);
+  const [descontoAtual, setDescontoAtual] = useState(
+    Number(pedido?.desconto || 0)
+  );
+  const [motivoDescontoAtual, setMotivoDescontoAtual] = useState(
+    pedido?.motivoDesconto || ""
+  );
   const [formaPagamento, setFormaPagamento] = useState("PIX");
   const [valorInput, setValorInput] = useState("");
   const [processando, setProcessando] = useState(false);
@@ -29,14 +45,32 @@ export default function ModalPagamentoComanda({
   const [numeroPessoas, setNumeroPessoas] = useState(2);
   const [itensSelecionados, setItensSelecionados] = useState({});
 
+  const [exibirFormDesconto, setExibirFormDesconto] = useState(false);
+  const [tipoDesconto, setTipoDesconto] = useState("valor");
+  const [valorDescontoInput, setValorDescontoInput] = useState("");
+  const [motivoDescontoInput, setMotivoDescontoInput] = useState("");
+  const [senhaAutorizacaoDesconto, setSenhaAutorizacaoDesconto] = useState("");
+  const [processandoDesconto, setProcessandoDesconto] = useState(false);
+
   useEffect(() => {
     if (!aberto || !pedido?.idPedido) return;
     let ativo = true;
     async function carregarDetalhes() {
       try {
         const dados = await obterPedido(pedido.idPedido);
-        if (ativo && dados?.pagamentos) {
-          setPagamentosAnteriores(dados.pagamentos);
+        if (ativo) {
+          if (dados?.pagamentos) {
+            setPagamentosAnteriores(dados.pagamentos);
+          }
+          const desc =
+            dados?.desconto ?? dados?.pedido?.desconto ?? pedido?.desconto ?? 0;
+          setDescontoAtual(Number(desc) || 0);
+          setMotivoDescontoAtual(
+            dados?.motivoDesconto ||
+              dados?.pedido?.motivoDesconto ||
+              pedido?.motivoDesconto ||
+              ""
+          );
         }
       } catch {
         // Silencia erro opcional de pagamentos
@@ -46,7 +80,7 @@ export default function ModalPagamentoComanda({
     return () => {
       ativo = false;
     };
-  }, [aberto, pedido?.idPedido]);
+  }, [aberto, pedido?.idPedido, pedido?.desconto, pedido?.motivoDesconto]);
 
   const temItemEmPreparo = useMemo(
     () => itens.some((it) => it.status === "Em preparo"),
@@ -66,13 +100,22 @@ export default function ModalPagamentoComanda({
 
   const nenhumItemConsumido = itensConsumidos.length === 0;
 
-  const totalPedido = useMemo(() => {
+  const subtotalConsumido = useMemo(() => {
     if (nenhumItemConsumido) return 0;
     return itensConsumidos.reduce(
       (acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1),
       0
     );
   }, [itensConsumidos, nenhumItemConsumido]);
+
+  const totalPedido = useMemo(
+    () =>
+      Math.max(
+        0,
+        Number((subtotalConsumido - (Number(descontoAtual) || 0)).toFixed(2))
+      ),
+    [subtotalConsumido, descontoAtual]
+  );
 
   const totalPago = useMemo(
     () =>
@@ -123,6 +166,89 @@ export default function ModalPagamentoComanda({
   function handleUsarValorCalculado(valor) {
     if (valor > 0) {
       setValorInput(Math.min(valor, saldoRestante).toFixed(2));
+    }
+  }
+
+  const labelPerfilAutorizador =
+    CONFIG_DESCONTO_COMANDA.perfilAutorizador === "Garcom"
+      ? "Garçom"
+      : "Gerente";
+
+  async function handleAplicarDesconto() {
+    setErro(null);
+    setSucessoMsg(null);
+
+    const valorNum = parseFloat(String(valorDescontoInput).replace(",", "."));
+    if (isNaN(valorNum) || valorNum <= 0) {
+      setErro("Informe um valor ou percentual de desconto maior que zero.");
+      return;
+    }
+    if (!senhaAutorizacaoDesconto.trim()) {
+      setErro(
+        `A senha do ${labelPerfilAutorizador.toLowerCase()} é obrigatória para autenticar o desconto.`
+      );
+      return;
+    }
+
+    setProcessandoDesconto(true);
+    try {
+      const res = await aplicarDescontoPedido(pedido.idPedido, {
+        tipo: tipoDesconto,
+        valor: valorNum,
+        motivo:
+          motivoDescontoInput.trim() ||
+          `Desconto aplicado na comanda (autorizado por ${labelPerfilAutorizador})`,
+        senhaGerente: senhaAutorizacaoDesconto.trim(),
+        perfilAutorizador: CONFIG_DESCONTO_COMANDA.perfilAutorizador,
+      });
+      const novoDesconto = Number(
+        res?.pedido?.desconto ?? res?.desconto?.valor ?? 0
+      );
+      setDescontoAtual(novoDesconto);
+      setMotivoDescontoAtual(res?.desconto?.motivo || motivoDescontoInput);
+      setSenhaAutorizacaoDesconto("");
+      setValorDescontoInput("");
+      setExibirFormDesconto(false);
+      setSucessoMsg(res.message || "Desconto aplicado com sucesso.");
+      if (onPedidoAtualizado && res?.pedido) {
+        onPedidoAtualizado(res.pedido);
+      }
+    } catch (err) {
+      setErro(err.message || "Não foi possível aplicar o desconto.");
+    } finally {
+      setProcessandoDesconto(false);
+    }
+  }
+
+  async function handleRemoverDesconto() {
+    setErro(null);
+    setSucessoMsg(null);
+
+    if (!senhaAutorizacaoDesconto.trim()) {
+      setErro(
+        `Informe a senha do ${labelPerfilAutorizador.toLowerCase()} para remover o desconto.`
+      );
+      return;
+    }
+
+    setProcessandoDesconto(true);
+    try {
+      const res = await removerDescontoPedido(pedido.idPedido, {
+        senhaGerente: senhaAutorizacaoDesconto.trim(),
+        motivo: "Desconto removido antes do fechamento da comanda",
+      });
+      setDescontoAtual(0);
+      setMotivoDescontoAtual("");
+      setSenhaAutorizacaoDesconto("");
+      setExibirFormDesconto(false);
+      setSucessoMsg(res.message || "Desconto removido com sucesso.");
+      if (onPedidoAtualizado && res?.pedido) {
+        onPedidoAtualizado(res.pedido);
+      }
+    } catch (err) {
+      setErro(err.message || "Não foi possível remover o desconto.");
+    } finally {
+      setProcessandoDesconto(false);
     }
   }
 
@@ -312,6 +438,11 @@ export default function ModalPagamentoComanda({
                 <p className="text-sm sm:text-base font-extrabold text-gray-800">
                   R$ {totalPedido.toFixed(2)}
                 </p>
+                {descontoAtual > 0 && (
+                  <span className="text-[10px] text-emerald-700 font-semibold block">
+                    (Desconto: -R$ {descontoAtual.toFixed(2)})
+                  </span>
+                )}
               </div>
               <div>
                 <span className="text-[11px] text-emerald-700 font-medium">
@@ -330,6 +461,129 @@ export default function ModalPagamentoComanda({
                 </p>
               </div>
             </div>
+
+            {CONFIG_DESCONTO_COMANDA.habilitado && saldoRestante > 0 && (
+              <div className="bg-white rounded-2xl p-4 border border-gray-200/80 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                    <MdDiscount className="text-brand" size={17} />
+                    Desconto (opcional)
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => setExibirFormDesconto((prev) => !prev)}
+                  >
+                    {exibirFormDesconto
+                      ? "Ocultar"
+                      : descontoAtual > 0
+                      ? "Alterar / Remover Desconto"
+                      : "Conceder Desconto"}
+                  </Button>
+                </div>
+
+                {descontoAtual > 0 && !exibirFormDesconto && (
+                  <p className="text-xs text-emerald-700 font-medium">
+                    Desconto ativo de{" "}
+                    <strong>R$ {descontoAtual.toFixed(2)}</strong>
+                    {motivoDescontoAtual ? ` (${motivoDescontoAtual})` : ""}.
+                  </p>
+                )}
+
+                {exibirFormDesconto && (
+                  <div className="space-y-3 pt-2 border-t border-gray-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Tipo de Desconto">
+                        <Select
+                          value={tipoDesconto}
+                          onChange={(e) => setTipoDesconto(e.target.value)}
+                          disabled={processandoDesconto}
+                        >
+                          <option value="valor">Valor em Reais (R$)</option>
+                          <option value="percentual">Percentual (%)</option>
+                        </Select>
+                      </Field>
+                      <Field
+                        label={
+                          tipoDesconto === "percentual"
+                            ? "Percentual (%)"
+                            : "Valor do Desconto (R$)"
+                        }
+                      >
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={
+                            tipoDesconto === "percentual"
+                              ? 100
+                              : subtotalConsumido
+                          }
+                          placeholder={
+                            tipoDesconto === "percentual" ? "Ex: 10" : "Ex: 15.00"
+                          }
+                          value={valorDescontoInput}
+                          onChange={(e) =>
+                            setValorDescontoInput(e.target.value)
+                          }
+                          disabled={processandoDesconto}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Justificativa / Motivo (opcional)">
+                        <Input
+                          type="text"
+                          placeholder="Ex: Cortesia / Fidelidade..."
+                          value={motivoDescontoInput}
+                          onChange={(e) =>
+                            setMotivoDescontoInput(e.target.value)
+                          }
+                          disabled={processandoDesconto}
+                        />
+                      </Field>
+                      <Field
+                        label={`Senha do ${labelPerfilAutorizador} (obrigatória)`}
+                        required
+                      >
+                        <Input
+                          type="password"
+                          placeholder={`Digite a senha do ${labelPerfilAutorizador.toLowerCase()}`}
+                          value={senhaAutorizacaoDesconto}
+                          onChange={(e) =>
+                            setSenhaAutorizacaoDesconto(e.target.value)
+                          }
+                          disabled={processandoDesconto}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2">
+                      {descontoAtual > 0 && (
+                        <Button
+                          variant="dangerSoft"
+                          size="xs"
+                          icon={MdDelete}
+                          loading={processandoDesconto}
+                          onClick={handleRemoverDesconto}
+                        >
+                          Remover Desconto Atual
+                        </Button>
+                      )}
+                      <Button
+                        size="xs"
+                        icon={MdLock}
+                        loading={processandoDesconto}
+                        onClick={handleAplicarDesconto}
+                      >
+                        Autenticar & Aplicar Desconto
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {pagamentosAnteriores.length > 0 && (
               <div className="bg-white rounded-2xl p-3.5 border border-gray-200/80 space-y-2">

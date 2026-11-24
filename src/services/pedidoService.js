@@ -141,18 +141,20 @@ export async function liberarSobremesa(idItemPedido) {
   return response.json();
 }
 
-export async function obterFilaKds() {
+export async function obterFilaCozinha() {
   const response = await fetchComAuth(`${BASE_URL}/pedidos/kds/fila`, {
     method: "GET",
   });
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || "Erro ao obter fila do KDS.");
+    throw new Error(errorData.detail || "Erro ao obter fila da cozinha.");
   }
 
   return response.json();
 }
+
+export const obterFilaKds = obterFilaCozinha;
 
 export async function abrirMesa(idMesa) {
   const response = await fetchComAuth(`${BASE_URL}/mesas/${idMesa}/abrir`, {
@@ -181,21 +183,95 @@ export async function listarMesas(idRestaurante) {
   return response.json();
 }
 
+export const JUSTIFICATIVA_CANCELAMENTO_PADRAO =
+  "Cancelado pelo garçom no atendimento da mesa";
+
+/**
+ * Configuração pronta para ativação do fluxo de desconto na comanda.
+ * - `habilitado`: Define se a seção de aplicar/remover desconto é exibida no modal de pagamento.
+ * - `perfilAutorizador`: Define de quem a senha de autenticação será exigida ("Gerente" | "Garcom").
+ *   Em ambos os casos, a autenticação por senha é obrigatória.
+ */
+export const CONFIG_DESCONTO_COMANDA = {
+  habilitado: false,
+  perfilAutorizador: "Gerente", // "Gerente" | "Garcom"
+};
+
 export async function cancelarItemPedido(
   idItemPedido,
-  motivo = "Cancelado pelo colaborador"
+  motivo = JUSTIFICATIVA_CANCELAMENTO_PADRAO
 ) {
+  const motivoEfetivo =
+    typeof motivo === "string" && motivo.trim()
+      ? motivo.trim()
+      : JUSTIFICATIVA_CANCELAMENTO_PADRAO;
+
   const response = await fetchComAuth(
     `${BASE_URL}/pedidos/itens/${idItemPedido}/cancelar`,
     {
       method: "PATCH",
-      body: JSON.stringify({ motivo }),
+      body: JSON.stringify({
+        motivo: motivoEfetivo,
+        justificativa: motivoEfetivo,
+      }),
     }
   );
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || "Erro ao cancelar item do pedido.");
+  }
+
+  return response.json();
+}
+
+export async function aplicarDescontoPedido(idPedido, payload) {
+  const response = await fetchComAuth(
+    `${BASE_URL}/pedidos/${idPedido}/desconto`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Erro ao aplicar desconto na comanda.");
+  }
+
+  return response.json();
+}
+
+export async function removerDescontoPedido(idPedido, payload = {}) {
+  const response = await fetchComAuth(
+    `${BASE_URL}/pedidos/${idPedido}/desconto`,
+    {
+      method: "DELETE",
+      body: JSON.stringify(payload),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Erro ao remover desconto da comanda.");
+  }
+
+  return response.json();
+}
+
+export async function obterLogsDescontoPedido(idPedido) {
+  const response = await fetchComAuth(
+    `${BASE_URL}/pedidos/${idPedido}/desconto/logs`,
+    {
+      method: "GET",
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.detail || "Erro ao consultar histórico de descontos."
+    );
   }
 
   return response.json();

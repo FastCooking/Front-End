@@ -6,6 +6,7 @@ import {
   MdExitToApp,
   MdMenu,
 } from "react-icons/md";
+import { formatarFuncao } from "../../constants/RotasPerfil";
 
 const STORAGE_KEY = "fc_sidebar_collapsed";
 
@@ -143,7 +144,7 @@ export function AppShell({
                   </p>
                   {usuario.funcao && (
                     <p className="text-[11px] text-gray-500 truncate">
-                      {usuario.funcao}
+                      {formatarFuncao(usuario.funcao)}
                     </p>
                   )}
                 </div>

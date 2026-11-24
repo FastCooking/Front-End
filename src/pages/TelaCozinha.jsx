@@ -21,7 +21,7 @@ import {
   useToast,
 } from "../components/ui";
 import { API_BASE } from "../config/api";
-import { alterarStatusItem, obterFilaKds } from "../services/pedidoService";
+import { alterarStatusItem, obterFilaCozinha } from "../services/pedidoService";
 
 function buildWsUrl() {
   const wsBase = API_BASE.replace(/^http/, "ws");
@@ -59,7 +59,7 @@ export default function TelaCozinha() {
 
   const carregarFilaHttp = useCallback(async () => {
     try {
-      const data = await obterFilaKds();
+      const data = await obterFilaCozinha();
       if (data && Array.isArray(data.items)) {
         setFila(data.items);
       }
@@ -227,7 +227,7 @@ export default function TelaCozinha() {
 
   return (
     <AppShell
-      modulo="KDS — Cozinha"
+      modulo="Fila da Cozinha"
       onLogout={handleLogout}
       headerActions={
         <>

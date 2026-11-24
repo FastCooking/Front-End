@@ -37,7 +37,7 @@ export function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {loading ? (
+            {loading && rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length || 1} className="py-12 text-center">
                   <Spinner size="lg" label={loadingLabel} />

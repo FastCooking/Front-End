@@ -20,53 +20,62 @@ import {
   StatusBadge,
 } from "../../components/ui";
 
-export default function SecaoCozinha({ filaKds, carregando, onRecarregar }) {
-  const [filtroStatusKds, setFiltroStatusKds] = useState("Todos");
+export default function SecaoCozinha({
+  filaCozinha,
+  filaKds,
+  carregando,
+  onRecarregar,
+}) {
+  const fila = useMemo(
+    () => filaCozinha || filaKds || [],
+    [filaCozinha, filaKds]
+  );
+  const [filtroStatusFila, setFiltroStatusFila] = useState("Todos");
 
   const opcoesStatus = useMemo(
     () => [
-      { value: "Todos", label: "Todos", count: filaKds.length },
+      { value: "Todos", label: "Todos", count: fila.length },
       {
         value: "Pendente",
         label: "Pendentes",
-        count: filaKds.filter((i) => i.status === "Pendente").length,
+        count: fila.filter((i) => i.status === "Pendente").length,
       },
       {
         value: "Em preparo",
         label: "Em Preparo",
-        count: filaKds.filter((i) => i.status === "Em preparo").length,
+        count: fila.filter((i) => i.status === "Em preparo").length,
       },
       {
         value: "Pronto",
         label: "Prontos",
-        count: filaKds.filter((i) => i.status === "Pronto").length,
+        count: fila.filter((i) => i.status === "Pronto").length,
       },
     ],
-    [filaKds]
+    [fila]
   );
 
   const filaFiltrada = useMemo(
     () =>
-      filaKds.filter((item) => {
-        if (filtroStatusKds !== "Todos" && item.status !== filtroStatusKds) {
+      fila.filter((item) => {
+        if (filtroStatusFila !== "Todos" && item.status !== filtroStatusFila) {
           return false;
         }
         return true;
       }),
-    [filaKds, filtroStatusKds]
+    [fila, filtroStatusFila]
   );
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Fila da Cozinha (KDS)"
+        title="Fila da Cozinha"
         icon={MdSoupKitchen}
         actions={
           <Button
             variant="secondary"
             size="sm"
             icon={MdRefresh}
-            onClick={onRecarregar}
+            onClick={() => onRecarregar && onRecarregar({ silencioso: false })}
           >
             Atualizar
           </Button>
@@ -75,8 +84,8 @@ export default function SecaoCozinha({ filaKds, carregando, onRecarregar }) {
 
       <Pills
         items={opcoesStatus}
-        value={filtroStatusKds}
-        onChange={setFiltroStatusKds}
+        value={filtroStatusFila}
+        onChange={setFiltroStatusFila}
       />
 
       <div className="bg-brand-soft/60 border border-gold/25 rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-700">
@@ -84,13 +93,13 @@ export default function SecaoCozinha({ filaKds, carregando, onRecarregar }) {
           <MdInfoOutline className="text-brand shrink-0" size={18} />
           <span>
             <strong>Visão Gerencial:</strong> Esta fila reflete a priorização
-            em tempo real do motor KDS.
+            automática dos pedidos em tempo real.
           </span>
         </div>
         <Badge tone="brand">Sincronização automática</Badge>
       </div>
 
-      {carregando && filaKds.length === 0 ? (
+      {carregando && fila.length === 0 ? (
         <Card className="py-14 flex justify-center">
           <Spinner size="lg" label="Carregando fila da cozinha..." />
         </Card>

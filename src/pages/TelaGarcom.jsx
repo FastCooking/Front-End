@@ -21,6 +21,8 @@ import {
   Button,
   Card,
   EmptyState,
+  Field,
+  Input,
   Modal,
   PageHeader,
   StatusBadge,
@@ -113,6 +115,9 @@ export default function TelaGarcom() {
   const [carregandoComanda, setCarregandoComanda] = useState(false);
   const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false);
   const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
+  const [modalCancelamentoItem, setModalCancelamentoItem] = useState(null);
+  const [justificativaCancelamento, setJustificativaCancelamento] =
+    useState("");
 
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
@@ -463,43 +468,64 @@ export default function TelaGarcom() {
     }
   }
 
+  const SUGESTOES_JUSTIFICATIVA_CANCELAMENTO = [
+    "Solicitação do cliente",
+    "Item lançado por engano",
+    "Demora no preparo",
+    "Troca de prato pelo cliente",
+  ];
+
+  function abrirModalCancelarItem(
+    item,
+    motivoPadrao = "Cancelado pelo garçom no atendimento da mesa"
+  ) {
+    setJustificativaCancelamento("");
+    setModalCancelamentoItem({
+      item,
+      motivoPadrao,
+    });
+  }
+
+  async function confirmarCancelamentoComJustificativa() {
+    if (!modalCancelamentoItem?.item) return;
+    const { item, motivoPadrao } = modalCancelamentoItem;
+    const motivoFinal =
+      justificativaCancelamento.trim() ||
+      motivoPadrao ||
+      "Cancelado pelo garçom no atendimento da mesa";
+
+    setItemEmAtualizacao(item.idItemPedido);
+    setProcessando(true);
+    try {
+      await cancelarItemPedido(item.idItemPedido, motivoFinal);
+      setComandaModal((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          itens: prev.itens.map((it) =>
+            it.idItemPedido === item.idItemPedido
+              ? { ...it, status: "Cancelado" }
+              : it
+          ),
+        };
+      });
+      setModalCancelamentoItem(null);
+      setJustificativaCancelamento("");
+      toast.success("O item foi cancelado com sucesso.");
+    } catch (err) {
+      toast.error(err.message || "Não foi possível cancelar o item.");
+    } finally {
+      setItemEmAtualizacao(null);
+      setProcessando(false);
+    }
+  }
+
   async function handleAlterarQuantidade(item, novaQuantidade) {
     if (novaQuantidade <= 0) {
-      const ok = await confirm({
-        title: "Cancelar Item",
-        message: `A quantidade foi reduzida a zero. Deseja realmente cancelar o item "${
-          item.nomeItem || "Item"
-        }"?`,
-        confirmText: "Sim, Cancelar Item",
-        tone: "danger",
-      });
-      if (!ok) return;
-
-      setItemEmAtualizacao(item.idItemPedido);
-      setProcessando(true);
-      try {
-        await cancelarItemPedido(
-          item.idItemPedido,
-          "Quantidade reduzida a zero pelo garçom"
-        );
-        setComandaModal((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            itens: prev.itens.map((it) =>
-              it.idItemPedido === item.idItemPedido
-                ? { ...it, status: "Cancelado" }
-                : it
-            ),
-          };
-        });
-        toast.success("Item cancelado.");
-      } catch (err) {
-        toast.error(err.message || "Não foi possível cancelar o item.");
-      } finally {
-        setItemEmAtualizacao(null);
-        setProcessando(false);
-      }
+      abrirModalCancelarItem(
+        item,
+        "Quantidade reduzida a zero pelo garçom no atendimento da mesa"
+      );
       return;
     }
 
@@ -529,42 +555,11 @@ export default function TelaGarcom() {
     }
   }
 
-  async function handleCancelarItem(item) {
-    const ok = await confirm({
-      title: "Cancelar Item do Pedido",
-      message: `Deseja realmente cancelar o item "${
-        item.nomeItem || "Item"
-      }" (Qtd: ${item.quantidade}) da Mesa #${comandaModal?.mesa?.numero}?`,
-      confirmText: "Cancelar Item",
-      tone: "danger",
-    });
-    if (!ok) return;
-
-    setItemEmAtualizacao(item.idItemPedido);
-    setProcessando(true);
-    try {
-      await cancelarItemPedido(
-        item.idItemPedido,
-        "Cancelado pelo garçom no atendimento da mesa"
-      );
-      setComandaModal((prev) => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          itens: prev.itens.map((it) =>
-            it.idItemPedido === item.idItemPedido
-              ? { ...it, status: "Cancelado" }
-              : it
-          ),
-        };
-      });
-      toast.success("O item foi cancelado com sucesso.");
-    } catch (err) {
-      toast.error(err.message || "Não foi possível cancelar o item.");
-    } finally {
-      setItemEmAtualizacao(null);
-      setProcessando(false);
-    }
+  function handleCancelarItem(item) {
+    abrirModalCancelarItem(
+      item,
+      "Cancelado pelo garçom no atendimento da mesa"
+    );
   }
 
   async function handleItensAdicionados(itens) {
@@ -1042,6 +1037,16 @@ export default function TelaGarcom() {
           pedido={comandaModal.pedido}
           itens={comandaModal.itens}
           onFechar={() => setModalPagamentoAberto(false)}
+          onPedidoAtualizado={(pedidoAtualizado) => {
+            setComandaModal((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    pedido: { ...prev.pedido, ...pedidoAtualizado },
+                  }
+                : prev
+            );
+          }}
           onSucesso={async () => {
             const numMesa = comandaModal.mesa.numero;
             setComandaModal(null);
@@ -1051,6 +1056,99 @@ export default function TelaGarcom() {
             );
           }}
         />
+      )}
+
+      {modalCancelamentoItem && (
+        <Modal
+          open
+          onClose={() => {
+            if (!processando) {
+              setModalCancelamentoItem(null);
+              setJustificativaCancelamento("");
+            }
+          }}
+          title="Cancelar Item do Pedido"
+          subtitle={
+            comandaModal?.mesa?.numero
+              ? `Mesa #${comandaModal.mesa.numero}`
+              : undefined
+          }
+          icon={MdClose}
+          size="md"
+          footer={
+            <div className="w-full flex items-center justify-end gap-2.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={processando}
+                onClick={() => {
+                  setModalCancelamentoItem(null);
+                  setJustificativaCancelamento("");
+                }}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                loading={processando}
+                onClick={confirmarCancelamentoComJustificativa}
+              >
+                Confirmar Cancelamento
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+              Deseja cancelar o item{" "}
+              <strong className="text-gray-900">
+                {modalCancelamentoItem.item.quantidade}x{" "}
+                {modalCancelamentoItem.item.nomeItem ||
+                  modalCancelamentoItem.item.nome ||
+                  "Item"}
+              </strong>
+              ?
+            </p>
+
+            <Field
+              label="Justificativa do cancelamento (opcional)"
+              hint="Se deixado em branco, uma justificativa padrão de atendimento será registrada."
+            >
+              <Input
+                type="text"
+                placeholder="Ex: Cliente desistiu do item..."
+                value={justificativaCancelamento}
+                onChange={(e) => setJustificativaCancelamento(e.target.value)}
+                disabled={processando}
+                maxLength={160}
+              />
+            </Field>
+
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-gray-500 block">
+                Motivos rápidos:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {SUGESTOES_JUSTIFICATIVA_CANCELAMENTO.map((sugestao) => (
+                  <button
+                    key={sugestao}
+                    type="button"
+                    disabled={processando}
+                    onClick={() => setJustificativaCancelamento(sugestao)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                      justificativaCancelamento === sugestao
+                        ? "bg-brand text-white border-brand"
+                        : "bg-surface text-gray-700 border-gray-200 hover:border-brand/40"
+                    }`}
+                  >
+                    {sugestao}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </AppShell>
   );

@@ -48,7 +48,7 @@ const faqData = [
   {
     question: "Como os garçons recebem os pedidos prontos?",
     answer:
-      'Quando a cozinha marca um item como "pronto" no KDS (Kitchen Display System), todos os garçons em serviço recebem uma notificação sonora e visual em seus dispositivos móveis instantaneamente. Qualquer garçom que esteja disponível pode assumir a entrega, garantindo agilidade e distribuição equilibrada do trabalho.',
+      'Quando a cozinha marca um item como "pronto" na fila da cozinha, todos os garçons em serviço recebem uma notificação sonora e visual em seus dispositivos móveis instantaneamente. Qualquer garçom que esteja disponível pode assumir a entrega, garantindo agilidade e distribuição equilibrada do trabalho.',
   },
   {
     question: "O sistema funciona apenas para restaurantes de que porte?",
@@ -87,7 +87,7 @@ const features = [
   },
   {
     icon: MdRestaurantMenu,
-    title: "KDS — Kitchen Display System",
+    title: "Fila Inteligente da Cozinha",
     description:
       "Monitor de pedidos para a cozinha com priorização dinâmica, agrupamento por categoria e eliminação da comunicação verbal.",
   },
@@ -128,7 +128,7 @@ const steps = [
     number: "03",
     title: "Cozinha Produz",
     description:
-      "O pedido chega ao KDS da cozinha com prioridade dinâmica. A equipe prepara os pratos na ordem mais eficiente.",
+      "O pedido chega à fila da cozinha com prioridade dinâmica. A equipe prepara os pratos na ordem mais eficiente.",
   },
   {
     number: "04",
@@ -400,7 +400,7 @@ export default function LandingPage() {
                         Alerta ao Garçom
                       </p>
                       <p className="text-[11px] text-gray-500 truncate">
-                        Prato liberado no KDS
+                        Prato liberado na fila
                       </p>
                     </div>
                   </Card>
@@ -748,7 +748,7 @@ export default function LandingPage() {
               <ul className="space-y-1.5">
                 <li>Autoatendimento (Cliente)</li>
                 <li>Operacional (Garçom)</li>
-                <li>KDS (Cozinha)</li>
+                <li>Fila da Cozinha</li>
                 <li>Administrativo (Gerente)</li>
               </ul>
             </div>

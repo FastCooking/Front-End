@@ -218,11 +218,28 @@ export default function SecaoCardapio({
     try {
       const stored = JSON.parse(localStorage.getItem("user") || "null");
       if (stored?.idRestaurante) return String(stored.idRestaurante);
+      const token = localStorage.getItem("token");
+      if (token) {
+        const base64Url = token.split(".")[1];
+        if (base64Url) {
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const padded = base64.padEnd(
+            base64.length + ((4 - (base64.length % 4)) % 4),
+            "="
+          );
+          const payload = JSON.parse(atob(padded));
+          if (payload?.idRestaurante) return String(payload.idRestaurante);
+        }
+      }
     } catch {
       // ignore
     }
     return "";
   }, [idRestauranteGerente, itensCardapio]);
+
+  const urlVerCardapio = idRestauranteEfetivo
+    ? `/autoatendimento?idRestaurante=${encodeURIComponent(idRestauranteEfetivo)}`
+    : "/autoatendimento";
 
   return (
     <div className="space-y-5">
@@ -232,13 +249,9 @@ export default function SecaoCardapio({
         actions={
           <>
             <a
-              href={
-                idRestauranteEfetivo
-                  ? `/cardapio?idRestaurante=${encodeURIComponent(idRestauranteEfetivo)}`
-                  : "/cardapio"
-              }
+              href={urlVerCardapio}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-1.5 bg-white border border-gray-200 text-gray-700 hover:text-brand hover:bg-brand-soft px-3.5 py-2.5 rounded-xl font-semibold text-xs sm:text-sm shadow-xs transition-colors"
             >
               <MdLaunch size={17} />

@@ -22,6 +22,7 @@ import {
   useConfirm,
   useToast,
 } from "../../components/ui";
+import { formatarFuncao } from "../../constants/RotasPerfil";
 import {
   alterarStatusUsuario,
   excluirUsuario,
@@ -128,7 +129,7 @@ export default function SecaoEquipe({
     {
       key: "funcao",
       header: "Função",
-      render: (u) => <Badge tone="gold">{u.funcao}</Badge>,
+      render: (u) => <Badge tone="gold">{formatarFuncao(u.funcao)}</Badge>,
     },
     {
       key: "status",

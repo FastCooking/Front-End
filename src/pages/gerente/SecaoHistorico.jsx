@@ -506,7 +506,9 @@ export default function SecaoHistorico({
                             "Atendimento"}
                         </span>
                         <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-md font-medium">
-                          {h.funcaoUsuarioFechamento || "Equipe"}
+                          {h.funcaoUsuarioFechamento === "Garcom"
+                            ? "Garçom"
+                            : h.funcaoUsuarioFechamento || "Equipe"}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-xs">
@@ -662,7 +664,11 @@ export default function SecaoHistorico({
                   {detalhesModal.nomeUsuarioFechamento ||
                     detalhesModal.nomeGarcom ||
                     "Atendimento"}{" "}
-                  ({detalhesModal.funcaoUsuarioFechamento || "Equipe"})
+                  (
+                  {detalhesModal.funcaoUsuarioFechamento === "Garcom"
+                    ? "Garçom"
+                    : detalhesModal.funcaoUsuarioFechamento || "Equipe"}
+                  )
                 </strong>
               </span>
             </div>

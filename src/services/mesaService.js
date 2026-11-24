@@ -1,4 +1,4 @@
-import { fetchComAuth, getAuthHeaders } from './apiClient';
+import { fetchComAuth } from './apiClient';
 
 import { API_BASE as BASE_URL } from "../config/api";
 const API_URL = `${BASE_URL}/mesas`;
@@ -68,9 +68,9 @@ export async function excluirMesa(idMesa) {
 
 export async function obterQrCodeMesaUrl(idMesa) {
   const origin = window.location.origin;
-  const resposta = await fetch(`${API_URL}/${idMesa}/qrcode?origin=${encodeURIComponent(origin)}`, {
-    headers: getAuthHeaders(),
-  });
+  const resposta = await fetchComAuth(
+    `${API_URL}/${idMesa}/qrcode?origin=${encodeURIComponent(origin)}`
+  );
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));

@@ -8,7 +8,37 @@ export default function ModalQrCodeMesa({ mesa, onClose }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
-  const urlAutoatendimento = `${window.location.origin}/cardapio?idMesa=${mesa.idMesa}&idRestaurante=${mesa.idRestaurante}&mesa=${mesa.numero}`;
+  const idRestauranteResolvido = (() => {
+    if (mesa?.idRestaurante) return String(mesa.idRestaurante);
+    try {
+      const stored = JSON.parse(localStorage.getItem("user") || "null");
+      if (stored?.idRestaurante) return String(stored.idRestaurante);
+      const token = localStorage.getItem("token");
+      if (token) {
+        const base64Url = token.split(".")[1];
+        if (base64Url) {
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const padded = base64.padEnd(
+            base64.length + ((4 - (base64.length % 4)) % 4),
+            "="
+          );
+          const payload = JSON.parse(atob(padded));
+          if (payload?.idRestaurante) return String(payload.idRestaurante);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return "";
+  })();
+
+  const urlAutoatendimento = `${window.location.origin}/autoatendimento?idMesa=${encodeURIComponent(
+    mesa.idMesa
+  )}${
+    idRestauranteResolvido
+      ? `&idRestaurante=${encodeURIComponent(idRestauranteResolvido)}`
+      : ""
+  }&mesa=${encodeURIComponent(mesa.numero)}`;
 
   useEffect(() => {
     let ativo = true;

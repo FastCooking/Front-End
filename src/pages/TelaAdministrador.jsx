@@ -31,6 +31,7 @@ import {
   useConfirm,
   useToast,
 } from "../components/ui";
+import { formatarFuncao } from "../constants/RotasPerfil";
 import {
   alterarStatusRestaurante,
   excluirRestaurante,
@@ -301,7 +302,7 @@ function TelaAdministrador() {
     {
       key: "funcao",
       header: "Função",
-      render: (u) => <Badge tone="gold">{u.funcao}</Badge>,
+      render: (u) => <Badge tone="gold">{formatarFuncao(u.funcao)}</Badge>,
     },
     {
       key: "status",
