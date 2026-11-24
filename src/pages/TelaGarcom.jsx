@@ -1092,6 +1092,7 @@ export default function TelaGarcom() {
                 variant="danger"
                 size="sm"
                 loading={processando}
+                disabled={!justificativaCancelamento.trim() || processando}
                 onClick={confirmarCancelamentoComJustificativa}
               >
                 Confirmar Cancelamento
@@ -1112,8 +1113,9 @@ export default function TelaGarcom() {
             </p>
 
             <Field
-              label="Justificativa do cancelamento (opcional)"
-              hint="Se deixado em branco, uma justificativa padrão de atendimento será registrada."
+              label="Justificativa do cancelamento"
+              required
+              hint="Preencha ou selecione um motivo abaixo para habilitar o cancelamento."
             >
               <Input
                 type="text"

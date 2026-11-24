@@ -444,6 +444,9 @@ export default function ModalComandaMesa({ mesa, onClose }) {
                 variant="danger"
                 size="sm"
                 loading={processandoItem === itemParaCancelar.idItemPedido}
+                disabled={
+                  !justificativaCancelamento.trim() || Boolean(processandoItem)
+                }
                 onClick={confirmarCancelamentoItem}
               >
                 Confirmar Cancelamento
@@ -461,8 +464,9 @@ export default function ModalComandaMesa({ mesa, onClose }) {
               da Mesa #{mesa.numero}?
             </p>
             <Field
-              label="Justificativa do cancelamento (opcional)"
-              hint="Se deixado em branco, uma justificativa genérica será utilizada."
+              label="Justificativa do cancelamento"
+              required
+              hint="Informe o motivo para habilitar o cancelamento do item."
             >
               <Input
                 type="text"
