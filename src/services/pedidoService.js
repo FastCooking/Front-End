@@ -187,14 +187,15 @@ export const JUSTIFICATIVA_CANCELAMENTO_PADRAO =
   "Cancelado pelo garçom no atendimento da mesa";
 
 /**
- * Configuração pronta para ativação do fluxo de desconto na comanda.
+ * Configuração ativa do fluxo de desconto na comanda pelo Garçom.
  * - `habilitado`: Define se a seção de aplicar/remover desconto é exibida no modal de pagamento.
- * - `perfilAutorizador`: Define de quem a senha de autenticação será exigida ("Gerente" | "Garcom").
- *   Em ambos os casos, a autenticação por senha é obrigatória.
+ * - `perfilAutorizador`: Define de quem a senha de autenticação será exigida ("Garcom").
+ * - `limitePercentualMaximo`: Percentual máximo permitido para desconto (40%).
  */
 export const CONFIG_DESCONTO_COMANDA = {
-  habilitado: false,
-  perfilAutorizador: "Gerente", // "Gerente" | "Garcom"
+  habilitado: true,
+  perfilAutorizador: "Garcom",
+  limitePercentualMaximo: 40,
 };
 
 export async function cancelarItemPedido(

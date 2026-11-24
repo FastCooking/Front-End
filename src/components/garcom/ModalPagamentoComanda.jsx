@@ -174,6 +174,14 @@ export default function ModalPagamentoComanda({
       ? "Garçom"
       : "Gerente";
 
+  const limitePercentualMax =
+    CONFIG_DESCONTO_COMANDA.limitePercentualMaximo || 40;
+  const limiteValorMaximoReais = useMemo(
+    () =>
+      Number(((subtotalConsumido * limitePercentualMax) / 100).toFixed(2)),
+    [subtotalConsumido, limitePercentualMax]
+  );
+
   async function handleAplicarDesconto() {
     setErro(null);
     setSucessoMsg(null);
@@ -181,6 +189,23 @@ export default function ModalPagamentoComanda({
     const valorNum = parseFloat(String(valorDescontoInput).replace(",", "."));
     if (isNaN(valorNum) || valorNum <= 0) {
       setErro("Informe um valor ou percentual de desconto maior que zero.");
+      return;
+    }
+    if (tipoDesconto === "percentual" && valorNum > limitePercentualMax) {
+      setErro(
+        `O desconto máximo permitido é de ${limitePercentualMax}% do valor da comanda.`
+      );
+      return;
+    }
+    if (
+      tipoDesconto === "valor" &&
+      valorNum > limiteValorMaximoReais + 0.001
+    ) {
+      setErro(
+        `O desconto em reais não pode ultrapassar ${limitePercentualMax}% do subtotal (máx. R$ ${limiteValorMaximoReais.toFixed(
+          2
+        )}).`
+      );
       return;
     }
     if (!senhaAutorizacaoDesconto.trim()) {
@@ -192,13 +217,15 @@ export default function ModalPagamentoComanda({
 
     setProcessandoDesconto(true);
     try {
+      const senhaTrim = senhaAutorizacaoDesconto.trim();
       const res = await aplicarDescontoPedido(pedido.idPedido, {
         tipo: tipoDesconto,
         valor: valorNum,
         motivo:
           motivoDescontoInput.trim() ||
-          `Desconto aplicado na comanda (autorizado por ${labelPerfilAutorizador})`,
-        senhaGerente: senhaAutorizacaoDesconto.trim(),
+          `Desconto aplicado na comanda pelo ${labelPerfilAutorizador.toLowerCase()}`,
+        senha: senhaTrim,
+        senhaGarcom: senhaTrim,
         perfilAutorizador: CONFIG_DESCONTO_COMANDA.perfilAutorizador,
       });
       const novoDesconto = Number(
@@ -233,8 +260,10 @@ export default function ModalPagamentoComanda({
 
     setProcessandoDesconto(true);
     try {
+      const senhaTrim = senhaAutorizacaoDesconto.trim();
       const res = await removerDescontoPedido(pedido.idPedido, {
-        senhaGerente: senhaAutorizacaoDesconto.trim(),
+        senha: senhaTrim,
+        senhaGarcom: senhaTrim,
         motivo: "Desconto removido antes do fechamento da comanda",
       });
       setDescontoAtual(0);
@@ -506,9 +535,14 @@ export default function ModalPagamentoComanda({
                       <Field
                         label={
                           tipoDesconto === "percentual"
-                            ? "Percentual (%)"
-                            : "Valor do Desconto (R$)"
+                            ? `Percentual (máx. ${limitePercentualMax}%)`
+                            : `Valor do Desconto (máx. R$ ${limiteValorMaximoReais.toFixed(
+                                2
+                              )})`
                         }
+                        hint={`Limite máximo de ${limitePercentualMax}% sobre o subtotal (R$ ${limiteValorMaximoReais.toFixed(
+                          2
+                        )}).`}
                       >
                         <Input
                           type="number"
@@ -516,11 +550,15 @@ export default function ModalPagamentoComanda({
                           min="0.01"
                           max={
                             tipoDesconto === "percentual"
-                              ? 100
-                              : subtotalConsumido
+                              ? limitePercentualMax
+                              : limiteValorMaximoReais
                           }
                           placeholder={
-                            tipoDesconto === "percentual" ? "Ex: 10" : "Ex: 15.00"
+                            tipoDesconto === "percentual"
+                              ? `Ex: 10 (máx. ${limitePercentualMax}%)`
+                              : `Ex: 10.00 (máx. ${limiteValorMaximoReais.toFixed(
+                                  2
+                                )})`
                           }
                           value={valorDescontoInput}
                           onChange={(e) =>
