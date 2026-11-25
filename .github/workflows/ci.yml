@@ -2,13 +2,33 @@ name: CI - Frontend
 
 on:
   push:
-    branches: [main, develop, dev]
+    branches:
+      - main
+      - develop
+      - dev
   pull_request:
-    branches: [main, develop, dev]
+    branches:
+      - main
+      - develop
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  lint-and-test:
+  build-dev:
+    name: Lint & Build (Dev)
+    if: >-
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/dev')) ||
+      (github.event_name == 'pull_request' &&
+      (github.base_ref == 'develop' || github.base_ref == 'dev'))
     runs-on: ubuntu-latest
+
+    env:
+      VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'http://localhost:8000' }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -23,5 +43,35 @@ jobs:
       - name: Rodar lint
         run: npm run lint
 
-      - name: Testar Build
+      - name: Testar Build (Dev)
+        run: npm run build
+
+  build-prod:
+    name: Lint & Build (Prod)
+    if: >-
+      ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.base_ref == 'main')
+    runs-on: ubuntu-latest
+
+    environment: ${{ github.ref == 'refs/heads/main' && 'Production' || '' }}
+
+    env:
+      VITE_API_URL: ${{ vars.VITE_API_URL || secrets.VITE_API_URL || 'http://localhost:8000' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Rodar lint
+        run: npm run lint
+
+      - name: Testar Build (Prod)
         run: npm run build
