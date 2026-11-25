@@ -70,13 +70,8 @@ export function AppShell({
           {/* Topo da Sidebar */}
           <div className="h-16 px-3.5 border-b border-gray-100 flex items-center justify-between gap-2 shrink-0">
             {!recolhida && (
-              <div className="flex items-center gap-2.5 min-w-0">
-                <img
-                  src="/fast cooking logo.svg"
-                  alt="Fast Cooking"
-                  className="h-8 w-auto shrink-0"
-                />
-                <span className="font-extrabold text-sm text-brand truncate">
+              <div className="flex items-center min-w-0 px-1">
+                <span className="font-black text-base text-brand tracking-tight truncate">
                   Fast Cooking
                 </span>
               </div>
@@ -178,14 +173,9 @@ export function AppShell({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="h-16 px-4 border-b border-gray-100 flex items-center justify-between">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <img
-                  src="/fast cooking logo.svg"
-                  alt="Fast Cooking"
-                  className="h-7 w-auto shrink-0"
-                />
-                <span className="font-extrabold text-sm text-brand truncate">
-                  {modulo}
+              <div className="flex items-center min-w-0">
+                <span className="font-black text-base text-brand tracking-tight truncate">
+                  Fast Cooking
                 </span>
               </div>
               <button

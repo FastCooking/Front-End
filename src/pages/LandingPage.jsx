@@ -19,6 +19,7 @@ import {
   MdSpeed,
 } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/fast cooking logo.png";
 import {
   Badge,
   Button,
@@ -235,15 +236,12 @@ export default function LandingPage() {
       {/* Header Sticky padrão Autoatendimento */}
       <header className="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-gray-200/80 shadow-xs py-3">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
-          <a href="#hero" className="flex items-center gap-2.5 shrink-0">
+          <a href="#hero" className="flex items-center shrink-0">
             <img
-              src="/fast cooking logo.svg"
+              src={logo}
               alt="Fast Cooking"
-              className="h-9 w-auto"
+              className="h-10 w-auto object-contain"
             />
-            <span className="font-black text-base sm:text-lg text-brand tracking-tight">
-              Fast Cooking
-            </span>
           </a>
 
           {/* Navegação em Pills (mesmo estilo do FiltroCategorias) */}
@@ -692,15 +690,12 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 text-xs text-gray-600">
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center">
                 <img
-                  src="/fast cooking logo.svg"
+                  src={logo}
                   alt="Fast Cooking"
-                  className="h-8 w-auto"
+                  className="h-10 w-auto object-contain"
                 />
-                <span className="font-black text-sm text-brand">
-                  Fast Cooking
-                </span>
               </div>
               <p className="leading-relaxed">
                 Sistema inteligente de gestão de pedidos para restaurantes de

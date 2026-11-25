@@ -8,6 +8,7 @@ import {
   MdVisibilityOff,
 } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
+import logo from "../assets/fast cooking logo.png";
 import { Button, Card, Field, Input } from "../components/ui";
 import { RotaPerfil } from "../constants/RotasPerfil";
 import { login } from "../services/authService";
@@ -85,7 +86,7 @@ function TelaLogin() {
 
         <div className="flex flex-col items-center text-center mb-7">
           <img
-            src="/fast cooking logo.svg"
+            src={logo}
             alt="Fast Cooking"
             className="h-14 w-auto object-contain mb-3"
           />

@@ -7,6 +7,7 @@ import {
   MdTableBar,
 } from "react-icons/md";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import logo from "../../assets/fast cooking logo.png";
 import PublicShell from "../../components/layout/PublicShell";
 import {
   Button,
@@ -178,7 +179,7 @@ export default function OrderTracking() {
       <div className="min-h-screen bg-surface flex items-center justify-center px-4 py-12">
         <Card className="max-w-md w-full p-7 sm:p-8 text-center">
           <img
-            src="/fast cooking logo.svg"
+            src={logo}
             alt="Fast Cooking"
             className="h-12 mx-auto mb-4 object-contain"
           />
