@@ -1,81 +1,79 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  MdStore,
-  MdPeople,
   MdAdd,
-  MdEdit,
   MdDelete,
+  MdEdit,
   MdLockReset,
+  MdPeople,
   MdSearch,
-  MdToggleOn,
+  MdStore,
   MdToggleOff,
-  MdExitToApp,
-  MdFilterList,
+  MdToggleOn,
 } from "react-icons/md";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
+import ModalEditarRestaurante from "../components/administrador/ModalEditarRestaurante";
+import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
+import ModalNovoRestaurante from "../components/administrador/ModalNovoRestaurante";
+import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
+import ModalResetarSenha from "../components/administrador/ModalResetarSenha";
+import AppShell from "../components/layout/AppShell";
 import {
-  listarRestaurantes,
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  EmptyState,
+  Input,
+  PageHeader,
+  Select,
+  Spinner,
+  useConfirm,
+  useToast,
+} from "../components/ui";
+import { formatarFuncao } from "../constants/RotasPerfil";
+import {
   alterarStatusRestaurante,
   excluirRestaurante,
+  listarRestaurantes,
 } from "../services/restauranteService";
 import {
-  listarUsuarios,
   alterarStatusUsuario,
   excluirUsuario,
+  listarUsuarios,
 } from "../services/usuarioService";
 
-import ModalNovoRestaurante from "../components/administrador/ModalNovoRestaurante";
-import ModalEditarRestaurante from "../components/administrador/ModalEditarRestaurante";
-import ModalNovoUsuario from "../components/administrador/ModalNovoUsuario";
-import ModalEditarUsuario from "../components/administrador/ModalEditarUsuario";
-import ModalResetarSenha from "../components/administrador/ModalResetarSenha";
-import ModalAlerta from "../components/common/ModalAlerta";
-import ModalConfirmacao from "../components/common/ModalConfirmacao";
-
-import logo from "../assets/fast cooking logo.png";
-
-// Usuário protegido contra exclusão e desativação
 const EMAIL_ADMIN_PROTEGIDO = "fastcooking@fastcooking.com.br";
 
 function TelaAdministrador() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  // Controle de Abas: 'restaurantes' ou 'usuarios'
-  const [abaAtiva, setAbaAtiva] = useState("restaurantes");
+  const abaAtiva =
+    searchParams.get("secao") === "usuarios" ? "usuarios" : "restaurantes";
 
-  // Dados
+  function setAbaAtiva(novaSecao) {
+    setSearchParams({ secao: novaSecao }, { replace: true });
+  }
+
   const [restaurantes, setRestaurantes] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
-  const [carregando, setCarregando] = useState(false);
-  const [mensagemSucesso, setMensagemSucesso] = useState("");
-  const [erroGeral, setErroGeral] = useState("");
+  const [carregandoRest, setCarregandoRest] = useState(false);
+  const [carregandoUsers, setCarregandoUsers] = useState(false);
 
-  // Filtros
   const [buscaRestaurante, setBuscaRestaurante] = useState("");
   const [filtroRestauranteUsuario, setFiltroRestauranteUsuario] = useState("");
   const [filtroFuncaoUsuario, setFiltroFuncaoUsuario] = useState("");
   const [buscaUsuario, setBuscaUsuario] = useState("");
 
-  // Modais
   const [modalNovoRest, setModalNovoRest] = useState(false);
   const [modalEditRest, setModalEditRest] = useState(null);
   const [modalNovoUser, setModalNovoUser] = useState(false);
   const [modalEditUser, setModalEditUser] = useState(null);
   const [modalResetSenha, setModalResetSenha] = useState(null);
 
-  // Modais de feedback (zero window.alert / window.confirm)
-  const [alerta, setAlerta] = useState({ aberto: false, titulo: "", mensagem: "", tipo: "info" });
-  const [confirmacao, setConfirmacao] = useState({
-    aberto: false,
-    titulo: "",
-    mensagem: "",
-    detalhes: null,
-    tipo: "perigo",
-    onConfirmar: null,
-  });
-
-  // Verificação de permissão
   useEffect(() => {
     const funcao = localStorage.getItem("funcao");
     const token = localStorage.getItem("token");
@@ -85,64 +83,64 @@ function TelaAdministrador() {
       return;
     }
 
-    // Apenas quem é Adm (ou adm) pode acessar esta tela
     if (funcao !== "Adm" && funcao !== "adm") {
-      alert("Acesso restrito a Administradores do Sistema.");
+      toast.error("Acesso restrito a Administradores do Sistema.");
       const funcaoNorm = (funcao || "").toLowerCase();
       if (funcaoNorm === "gerente") navigate("/gerente");
       else if (funcaoNorm === "garcom") navigate("/garcom");
-      else if (funcaoNorm === "cozinheiro" || funcaoNorm === "cozinha") navigate("/cozinha");
+      else if (funcaoNorm === "cozinheiro" || funcaoNorm === "cozinha")
+        navigate("/cozinha");
       else navigate("/login");
     }
-  }, [navigate]);
+  }, [navigate, toast]);
 
   const carregarRestaurantes = useCallback(async () => {
     try {
-      setCarregando(true);
+      setCarregandoRest(true);
       const params = {};
       if (buscaRestaurante.trim()) params.busca = buscaRestaurante.trim();
       const dados = await listarRestaurantes(params);
-      // Filtra para remover da visualização e vinculação os registros anonimizados/removidos
       const restaurantesValidos = (dados || []).filter(
         (r) => !r.nome?.toUpperCase().includes("RESTAURANTE REMOVIDO")
       );
       setRestaurantes(restaurantesValidos);
-    } catch (err) {
-      console.error("Erro ao carregar restaurantes:", err);
-      setErroGeral("Não foi possível carregar a lista de restaurantes.");
+    } catch {
+      toast.error("Não foi possível carregar a lista de restaurantes.");
     } finally {
-      setCarregando(false);
+      setCarregandoRest(false);
     }
-  }, [buscaRestaurante]);
+  }, [buscaRestaurante, toast]);
 
   const carregarUsuarios = useCallback(async () => {
     try {
-      setCarregando(true);
+      setCarregandoUsers(true);
       const params = {};
-      if (filtroRestauranteUsuario) params.idRestaurante = filtroRestauranteUsuario;
+      if (filtroRestauranteUsuario)
+        params.idRestaurante = filtroRestauranteUsuario;
       if (filtroFuncaoUsuario) params.funcao = filtroFuncaoUsuario;
       if (buscaUsuario.trim()) params.busca = buscaUsuario.trim();
       const dados = await listarUsuarios(params);
 
-      // Filtra para remover da visualização os usuários anonimizados/removidos
       const usuariosValidos = (dados || []).filter((u) => {
         const nomeUpper = u.nome?.toUpperCase() || "";
         const emailLower = u.email?.toLowerCase() || "";
         if (nomeUpper.includes("USUARIO REMOVIDO")) return false;
-        if (emailLower.includes("@anonimizado.local") || emailLower.startsWith("removido_")) return false;
+        if (
+          emailLower.includes("@anonimizado.local") ||
+          emailLower.startsWith("removido_")
+        )
+          return false;
         return true;
       });
 
       setUsuarios(usuariosValidos);
-    } catch (err) {
-      console.error("Erro ao carregar usuários:", err);
-      setErroGeral("Não foi possível carregar a lista de usuários.");
+    } catch {
+      toast.error("Não foi possível carregar a lista de usuários.");
     } finally {
-      setCarregando(false);
+      setCarregandoUsers(false);
     }
-  }, [filtroRestauranteUsuario, filtroFuncaoUsuario, buscaUsuario]);
+  }, [filtroRestauranteUsuario, filtroFuncaoUsuario, buscaUsuario, toast]);
 
-  // Carregar dados
   useEffect(() => {
     let ativo = true;
     Promise.resolve().then(() => {
@@ -163,92 +161,75 @@ function TelaAdministrador() {
     };
   }, [carregarUsuarios]);
 
-  function dispararSucesso(msg) {
-    setMensagemSucesso(msg);
-    setTimeout(() => setMensagemSucesso(""), 4000);
-  }
-
   async function handleToggleStatusRestaurante(r) {
     try {
       await alterarStatusRestaurante(r.idRestaurante, !r.status);
-      dispararSucesso(`Status de "${r.nome}" atualizado!`);
+      toast.success(`Status de "${r.nome}" atualizado!`);
       carregarRestaurantes();
     } catch (err) {
-      setAlerta({ aberto: true, titulo: "Erro", mensagem: err.message || "Erro ao alternar status do restaurante.", tipo: "erro" });
+      toast.error(err.message || "Erro ao alternar status do restaurante.");
     }
   }
 
   async function handleExcluirRestaurante(r) {
-    setConfirmacao({
-      aberto: true,
-      titulo: "Remover Restaurante",
-      mensagem: `Deseja realmente remover o restaurante "${r.nome}"? Esta ação desativará e removerá o restaurante do sistema.`,
-      tipo: "perigo",
-      textoConfirmar: "Remover Restaurante",
-      onConfirmar: async () => {
-        try {
-          await excluirRestaurante(r.idRestaurante);
-          setConfirmacao({ aberto: false });
-          dispararSucesso(`Restaurante "${r.nome}" removido com sucesso!`);
-          carregarRestaurantes();
-          carregarUsuarios();
-        } catch (err) {
-          setAlerta({ aberto: true, titulo: "Erro ao remover", mensagem: err.message || "Erro ao remover restaurante.", tipo: "erro" });
-        }
-      },
+    const ok = await confirm({
+      title: "Remover Restaurante",
+      message: `Deseja realmente remover o restaurante "${r.nome}"? Esta ação desativará e removerá o restaurante do sistema.`,
+      confirmText: "Remover Restaurante",
+      tone: "danger",
     });
+    if (!ok) return;
+
+    try {
+      await excluirRestaurante(r.idRestaurante);
+      toast.success(`Restaurante "${r.nome}" removido com sucesso!`);
+      carregarRestaurantes();
+      carregarUsuarios();
+    } catch (err) {
+      toast.error(err.message || "Erro ao remover restaurante.");
+    }
   }
 
   async function handleToggleStatusUsuario(u) {
-    // Validação de proteção do usuário raiz
     if (u.email === EMAIL_ADMIN_PROTEGIDO) {
-      setAlerta({
-        aberto: true,
-        titulo: "Operação não permitida",
-        mensagem: `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ter seu status alterado.`,
-        tipo: "aviso",
-      });
+      toast.warning(
+        `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal e não pode ser desativado.`
+      );
       return;
     }
 
     try {
       await alterarStatusUsuario(u.idUsuario, !u.status);
-      dispararSucesso(`Status de "${u.nome}" atualizado!`);
+      toast.success(`Status de "${u.nome}" atualizado!`);
       carregarUsuarios();
     } catch (err) {
-      setAlerta({ aberto: true, titulo: "Erro", mensagem: err.message || "Erro ao alternar status do usuário.", tipo: "erro" });
+      toast.error(err.message || "Erro ao alternar status do usuário.");
     }
   }
 
   async function handleExcluirUsuario(u) {
-    // Validação de proteção do usuário raiz
     if (u.email === EMAIL_ADMIN_PROTEGIDO) {
-      setAlerta({
-        aberto: true,
-        titulo: "Operação não permitida",
-        mensagem: `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal do sistema e não pode ser removido.`,
-        tipo: "aviso",
-      });
+      toast.warning(
+        `O usuário ${EMAIL_ADMIN_PROTEGIDO} é o administrador principal e não pode ser removido.`
+      );
       return;
     }
 
-    setConfirmacao({
-      aberto: true,
-      titulo: "Remover Usuário",
-      mensagem: `Deseja realmente remover o usuário "${u.nome}" (${u.email})?`,
-      tipo: "perigo",
-      textoConfirmar: "Remover Usuário",
-      onConfirmar: async () => {
-        try {
-          await excluirUsuario(u.idUsuario);
-          setConfirmacao({ aberto: false });
-          dispararSucesso(`Usuário "${u.nome}" removido com sucesso!`);
-          carregarUsuarios();
-        } catch (err) {
-          setAlerta({ aberto: true, titulo: "Erro ao remover", mensagem: err.message || "Erro ao remover usuário.", tipo: "erro" });
-        }
-      },
+    const ok = await confirm({
+      title: "Remover Usuário",
+      message: `Deseja realmente remover o usuário "${u.nome}" (${u.email})?`,
+      confirmText: "Remover Usuário",
+      tone: "danger",
     });
+    if (!ok) return;
+
+    try {
+      await excluirUsuario(u.idUsuario);
+      toast.success(`Usuário "${u.nome}" removido com sucesso!`);
+      carregarUsuarios();
+    } catch (err) {
+      toast.error(err.message || "Erro ao remover usuário.");
+    }
   }
 
   function handleLogout() {
@@ -259,386 +240,358 @@ function TelaAdministrador() {
     navigate("/login");
   }
 
-  // Nome do restaurante por ID
-  const mapRestaurantes = restaurantes.reduce((acc, curr) => {
-    acc[curr.idRestaurante] = curr.nome;
-    return acc;
-  }, {});
+  const mapRestaurantes = useMemo(
+    () =>
+      restaurantes.reduce((acc, curr) => {
+        acc[curr.idRestaurante] = curr.nome;
+        return acc;
+      }, {}),
+    [restaurantes]
+  );
+
+  const secoes = useMemo(
+    () => [
+      {
+        id: "restaurantes",
+        label: "Restaurantes",
+        icon: MdStore,
+        badge: restaurantes.length,
+      },
+      {
+        id: "usuarios",
+        label: "Usuários",
+        icon: MdPeople,
+        badge: usuarios.length,
+      },
+    ],
+    [restaurantes.length, usuarios.length]
+  );
+
+  const colunasUsuarios = [
+    {
+      key: "nome",
+      header: "Nome / E-mail",
+      render: (u) => {
+        const isRootAdmin = u.email === EMAIL_ADMIN_PROTEGIDO;
+        return (
+          <div>
+            <div className="font-semibold text-gray-900 flex items-center gap-1.5">
+              <span>{u.nome}</span>
+              {isRootAdmin && <Badge tone="brand">PROTEGIDO</Badge>}
+            </div>
+            <div className="text-xs text-gray-500">{u.email}</div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "cpf",
+      header: "CPF",
+      cellClassName: "text-xs font-mono",
+    },
+    {
+      key: "restaurante",
+      header: "Restaurante",
+      render: (u) => (
+        <span className="text-xs font-medium text-gray-800">
+          {mapRestaurantes[u.idRestaurante] ||
+            `Restaurante #${String(u.idRestaurante).slice(0, 8)}`}
+        </span>
+      ),
+    },
+    {
+      key: "funcao",
+      header: "Função",
+      render: (u) => <Badge tone="gold">{formatarFuncao(u.funcao)}</Badge>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (u) => (
+        <Badge tone={u.status ? "success" : "danger"}>
+          {u.status ? "Ativo" : "Inativo"}
+        </Badge>
+      ),
+    },
+    {
+      key: "acoes",
+      header: "Ações",
+      align: "right",
+      render: (u) => {
+        const isRootAdmin = u.email === EMAIL_ADMIN_PROTEGIDO;
+        return (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              onClick={() => setModalEditUser(u)}
+              className="p-1.5 rounded-xl text-gray-600 hover:text-brand hover:bg-brand-soft transition-colors cursor-pointer"
+              title="Editar Dados do Usuário"
+            >
+              <MdEdit size={18} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setModalResetSenha(u)}
+              className="p-1.5 rounded-xl text-gray-600 hover:text-gold hover:bg-amber-50 transition-colors cursor-pointer"
+              title="Redefinir Senha"
+            >
+              <MdLockReset size={20} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleToggleStatusUsuario(u)}
+              disabled={isRootAdmin}
+              className={`p-1.5 rounded-xl transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                u.status
+                  ? "text-emerald-600 hover:text-red-600 hover:bg-red-50"
+                  : "text-red-600 hover:text-emerald-600 hover:bg-emerald-50"
+              }`}
+              title={
+                isRootAdmin
+                  ? "Administrador principal não pode ser desativado"
+                  : u.status
+                  ? "Desativar Usuário"
+                  : "Ativar Usuário"
+              }
+            >
+              {u.status ? <MdToggleOn size={22} /> : <MdToggleOff size={22} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleExcluirUsuario(u)}
+              disabled={isRootAdmin}
+              className="p-1.5 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              title={
+                isRootAdmin
+                  ? "Administrador principal não pode ser removido"
+                  : "Remover Usuário"
+              }
+            >
+              <MdDelete size={18} />
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#FAF6F3] font-[Poppins] text-gray-800 pb-12">
-      {/* Header / Navbar */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-[#9C1C0E]/20 sticky top-0 z-40 px-6 py-4 flex flex-wrap items-center justify-between shadow-xs">
-        <div className="flex items-center gap-4">
-          <img src={logo} alt="Fast Cooking" className="h-10 w-auto" />
-          <div>
-            <h1 className="text-xl font-bold text-[#9C1C0E]">Painel do Administrador</h1>
-            <p className="text-xs text-gray-500">Gestão global de restaurantes e usuários</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 mt-2 sm:mt-0">
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1 text-sm text-gray-600 hover:text-[#9C1C0E] transition-colors cursor-pointer"
-            title="Sair da Conta"
-          >
-            <MdExitToApp size={18} />
-            <span>Sair</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Notificações */}
-      {mensagemSucesso && (
-        <div className="max-w-6xl mx-auto mt-4 px-4">
-          <div className="bg-green-100 border border-green-400 text-green-800 px-4 py-2 rounded-lg text-sm shadow-xs">
-            {mensagemSucesso}
-          </div>
-        </div>
-      )}
-
-      {erroGeral && (
-        <div className="max-w-6xl mx-auto mt-4 px-4">
-          <div className="bg-red-100 border border-red-400 text-red-800 px-4 py-2 rounded-lg text-sm shadow-xs">
-            {erroGeral}
-          </div>
-        </div>
-      )}
-
-      {/* Conteúdo Principal */}
-      <main className="max-w-6xl mx-auto mt-6 px-4">
-        {/* Abas */}
-        <div className="flex gap-2 border-b border-gray-300 pb-2 mb-6">
-          <button
-            onClick={() => setAbaAtiva("restaurantes")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
-              abaAtiva === "restaurantes"
-                ? "bg-[#9C1C0E] text-white shadow-md"
-                : "bg-white/60 text-gray-700 hover:bg-white"
-            }`}
-          >
-            <MdStore size={18} />
-            Restaurantes
-          </button>
-
-          <button
-            onClick={() => setAbaAtiva("usuarios")}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all cursor-pointer ${
-              abaAtiva === "usuarios"
-                ? "bg-[#9C1C0E] text-white shadow-md"
-                : "bg-white/60 text-gray-700 hover:bg-white"
-            }`}
-          >
-            <MdPeople size={18} />
-            Usuários
-          </button>
-        </div>
-
-        {/* ================= ABA RESTAURANTES ================= */}
-        {abaAtiva === "restaurantes" && (
-          <div>
-            <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  type="text"
-                  placeholder="Buscar restaurante por nome, CNPJ..."
-                  value={buscaRestaurante}
-                  onChange={(e) => setBuscaRestaurante(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
-                />
-              </div>
-
-              <button
-                onClick={() => setModalNovoRest(true)}
-                className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all"
-              >
-                <MdAdd size={20} />
+    <AppShell
+      modulo="Painel Administrativo"
+      secoes={secoes}
+      secaoAtiva={abaAtiva}
+      onSecao={setAbaAtiva}
+      onLogout={handleLogout}
+    >
+      {abaAtiva === "restaurantes" && (
+        <div className="space-y-5">
+          <PageHeader
+            title="Restaurantes Cadastrados"
+            icon={MdStore}
+            actions={
+              <Button icon={MdAdd} onClick={() => setModalNovoRest(true)}>
                 Novo Restaurante
-              </button>
-            </div>
+              </Button>
+            }
+          />
 
-            {/* Grid de Restaurantes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="relative max-w-md">
+            <MdSearch
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+              size={19}
+            />
+            <Input
+              type="text"
+              placeholder="Buscar restaurante por nome ou CNPJ..."
+              value={buscaRestaurante}
+              onChange={(e) => setBuscaRestaurante(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          {carregandoRest ? (
+            <Card className="py-14 flex justify-center">
+              <Spinner size="lg" label="Carregando restaurantes..." />
+            </Card>
+          ) : restaurantes.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={MdStore}
+                title="Nenhum restaurante encontrado"
+                description="Cadastre uma nova unidade ou limpe o filtro de busca."
+              />
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {restaurantes.map((r) => (
-                <div
+                <Card
                   key={r.idRestaurante}
-                  className={`bg-white/80 backdrop-blur-xs rounded-2xl p-6 shadow-md border transition-all flex flex-col justify-between ${
-                    r.status ? "border-gray-200" : "border-red-200 bg-red-50/40"
+                  hover
+                  className={`flex flex-col justify-between ${
+                    r.status ? "" : "border-red-200 bg-red-50/30"
                   }`}
                 >
                   <div>
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-bold text-lg text-gray-900 leading-tight">
+                    <div className="flex justify-between items-start gap-2 mb-3">
+                      <h3 className="font-bold text-base sm:text-lg text-gray-900 leading-tight">
                         {r.nome}
                       </h3>
-                      <span
-                        className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                          r.status ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                        }`}
-                      >
+                      <Badge tone={r.status ? "success" : "danger"}>
                         {r.status ? "Ativo" : "Inativo"}
-                      </span>
+                      </Badge>
                     </div>
 
-                    <div className="space-y-1 text-xs text-gray-600 mt-3">
-                      <p><strong>CNPJ:</strong> {r.cnpj}</p>
-                      <p><strong>Telefone:</strong> {r.telefone}</p>
-                      <p><strong>E-mail:</strong> {r.email}</p>
-                      <p><strong>CEP:</strong> {r.cep}</p>
-                      <p><strong>ID:</strong> {r.idRestaurante}</p>
+                    <div className="space-y-1 text-xs text-gray-600">
+                      <p>
+                        <strong>CNPJ:</strong> {r.cnpj}
+                      </p>
+                      <p>
+                        <strong>Telefone:</strong> {r.telefone}
+                      </p>
+                      <p>
+                        <strong>E-mail:</strong> {r.email}
+                      </p>
+                      <p>
+                        <strong>CEP:</strong> {r.cep}
+                      </p>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-4 mt-4 border-t border-gray-100">
                     <button
+                      type="button"
                       onClick={() => {
                         setFiltroRestauranteUsuario(String(r.idRestaurante));
                         setAbaAtiva("usuarios");
                       }}
-                      className="text-xs text-[#B78A10] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-xs text-brand font-semibold hover:underline flex items-center gap-1 cursor-pointer"
                     >
-                      <MdPeople size={14} /> Ver Usuários
+                      <MdPeople size={15} /> Ver Equipe
                     </button>
 
                     <div className="flex items-center gap-1">
-                      {/* Editar */}
                       <button
+                        type="button"
                         onClick={() => setModalEditRest(r)}
-                        className="p-1.5 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-xl text-gray-600 hover:text-brand hover:bg-brand-soft transition-colors cursor-pointer"
                         title="Editar Restaurante"
                       >
                         <MdEdit size={18} />
                       </button>
 
-                      {/* Ativar/Desativar */}
                       <button
+                        type="button"
                         onClick={() => handleToggleStatusRestaurante(r)}
-                        className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                        className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
                           r.status
-                            ? "text-green-600 hover:text-red-600 hover:bg-red-50"
-                            : "text-red-600 hover:text-green-600 hover:bg-green-50"
+                            ? "text-emerald-600 hover:text-red-600 hover:bg-red-50"
+                            : "text-red-600 hover:text-emerald-600 hover:bg-emerald-50"
                         }`}
-                        title={r.status ? "Desativar Restaurante" : "Ativar Restaurante"}
+                        title={
+                          r.status
+                            ? "Desativar Restaurante"
+                            : "Ativar Restaurante"
+                        }
                       >
-                        {r.status ? <MdToggleOn size={22} /> : <MdToggleOff size={22} />}
+                        {r.status ? (
+                          <MdToggleOn size={22} />
+                        ) : (
+                          <MdToggleOff size={22} />
+                        )}
                       </button>
 
-                      {/* Remover */}
                       <button
+                        type="button"
                         onClick={() => handleExcluirRestaurante(r)}
-                        className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
                         title="Remover Restaurante"
                       >
                         <MdDelete size={18} />
                       </button>
                     </div>
                   </div>
-                </div>
+                </Card>
               ))}
-
-              {restaurantes.length === 0 && !carregando && (
-                <div className="col-span-full text-center py-12 text-gray-500">
-                  Nenhum restaurante encontrado.
-                </div>
-              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+      )}
 
-        {/* ================= ABA USUÁRIOS ================= */}
-        {abaAtiva === "usuarios" && (
-          <div>
-            {/* Barra de Filtros e Criação */}
-            <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 mb-6">
-              <div className="flex flex-wrap items-center gap-3 flex-1">
-                {/* Busca */}
-                <div className="relative flex-1 min-w-[200px]">
-                  <MdSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="text"
-                    placeholder="Buscar por nome ou e-mail..."
-                    value={buscaUsuario}
-                    onChange={(e) => setBuscaUsuario(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 rounded-xl bg-white/70 border border-gray-200 text-sm focus:outline-none focus:border-[#9C1C0E]"
-                  />
-                </div>
-
-                {/* Filtro por Restaurante */}
-                <div className="flex items-center gap-1 bg-white/70 border border-gray-200 rounded-xl px-3 py-1.5">
-                  <MdFilterList className="text-gray-400" size={16} />
-                  <select
-                    value={filtroRestauranteUsuario}
-                    onChange={(e) => setFiltroRestauranteUsuario(e.target.value)}
-                    className="bg-transparent text-xs text-gray-700 focus:outline-none cursor-pointer"
-                  >
-                    <option value="">Todos os Restaurantes</option>
-                    {restaurantes.map((r) => (
-                      <option key={r.idRestaurante} value={r.idRestaurante}>
-                        {r.nome}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Filtro por Função */}
-                <select
-                  value={filtroFuncaoUsuario}
-                  onChange={(e) => setFiltroFuncaoUsuario(e.target.value)}
-                  className="bg-white/70 border border-gray-200 rounded-xl px-3 py-2 text-xs text-gray-700 focus:outline-none cursor-pointer"
-                >
-                  <option value="">Todas as Funções</option>
-                  <option value="Adm">Adm</option>
-                  <option value="Gerente">Gerente</option>
-                  <option value="Garcom">Garçom</option>
-                  <option value="Cozinheiro">Cozinheiro</option>
-                </select>
-              </div>
-
-              <button
-                onClick={() => setModalNovoUser(true)}
-                className="flex items-center justify-center gap-2 bg-[#9C1C0E] text-white px-5 py-2.5 rounded-xl font-medium text-sm hover:bg-[#7a160b] shadow-md cursor-pointer transition-all shrink-0"
-              >
-                <MdAdd size={20} />
+      {abaAtiva === "usuarios" && (
+        <div className="space-y-5">
+          <PageHeader
+            title="Usuários do Sistema"
+            icon={MdPeople}
+            actions={
+              <Button icon={MdAdd} onClick={() => setModalNovoUser(true)}>
                 Novo Usuário
-              </button>
+              </Button>
+            }
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative">
+              <MdSearch
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                size={19}
+              />
+              <Input
+                type="text"
+                placeholder="Buscar por nome ou e-mail..."
+                value={buscaUsuario}
+                onChange={(e) => setBuscaUsuario(e.target.value)}
+                className="pl-10"
+              />
             </div>
 
-            {/* Tabela de Usuários */}
-            <div className="bg-white/80 backdrop-blur-xs rounded-2xl shadow-md overflow-hidden border border-gray-200">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-gray-700">
-                  <thead className="bg-[#F9ECE5] text-xs uppercase text-[#9C1C0E] border-b border-gray-200">
-                    <tr>
-                      <th className="px-6 py-3 font-semibold">Nome / E-mail</th>
-                      <th className="px-6 py-3 font-semibold">CPF</th>
-                      <th className="px-6 py-3 font-semibold">Restaurante</th>
-                      <th className="px-6 py-3 font-semibold">Função</th>
-                      <th className="px-6 py-3 font-semibold">Status</th>
-                      <th className="px-6 py-3 font-semibold text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {usuarios.map((u) => {
-                      const isRootAdmin = u.email === EMAIL_ADMIN_PROTEGIDO;
+            <Select
+              value={filtroRestauranteUsuario}
+              onChange={(e) => setFiltroRestauranteUsuario(e.target.value)}
+            >
+              <option value="">Todos os Restaurantes</option>
+              {restaurantes.map((r) => (
+                <option key={r.idRestaurante} value={r.idRestaurante}>
+                  {r.nome}
+                </option>
+              ))}
+            </Select>
 
-                      return (
-                        <tr key={u.idUsuario} className="hover:bg-white/50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="font-semibold text-gray-900 flex items-center gap-1.5">
-                              {u.nome}
-                              {isRootAdmin && (
-                                <span className="text-[10px] bg-[#9C1C0E] text-white px-1.5 py-0.5 rounded-full font-bold">
-                                  PROTEGIDO
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-gray-500">{u.email}</div>
-                          </td>
-                          <td className="px-6 py-4 text-xs font-mono">{u.cpf}</td>
-                          <td className="px-6 py-4 text-xs">
-                            <span className="font-medium text-gray-800">
-                              {mapRestaurantes[u.idRestaurante] || `Restaurante #${u.idRestaurante}`}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs">
-                            <span className="bg-[#B78A10]/15 text-[#9C1C0E] px-2.5 py-1 rounded-md font-semibold">
-                              {u.funcao}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full font-medium ${
-                                u.status
-                                  ? "bg-green-100 text-green-800"
-                                  : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {u.status ? "Ativo" : "Inativo"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {/* Editar dados gerais */}
-                              <button
-                                onClick={() => setModalEditUser(u)}
-                                className="p-1.5 rounded-lg text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                                title="Editar Dados do Usuário"
-                              >
-                                <MdEdit size={18} />
-                              </button>
-
-                              {/* Resetar Senha */}
-                              <button
-                                onClick={() => setModalResetSenha(u)}
-                                className="p-1.5 rounded-lg text-gray-600 hover:text-[#B78A10] hover:bg-amber-50 transition-colors cursor-pointer"
-                                title="Redefinir Senha"
-                              >
-                                <MdLockReset size={20} />
-                              </button>
-
-                              {/* Ativar/Desativar */}
-                              <button
-                                onClick={() => handleToggleStatusUsuario(u)}
-                                disabled={isRootAdmin}
-                                className={`p-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                                  u.status
-                                    ? "text-green-600 hover:text-red-600 hover:bg-red-50"
-                                    : "text-red-600 hover:text-green-600 hover:bg-green-50"
-                                }`}
-                                title={
-                                  isRootAdmin
-                                    ? "Administrador principal não pode ser desativado"
-                                    : u.status
-                                    ? "Desativar Usuário"
-                                    : "Ativar Usuário"
-                                }
-                              >
-                                {u.status ? <MdToggleOn size={22} /> : <MdToggleOff size={22} />}
-                              </button>
-
-                              {/* Remover Usuário */}
-                              <button
-                                onClick={() => handleExcluirUsuario(u)}
-                                disabled={isRootAdmin}
-                                className="p-1.5 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                                title={
-                                  isRootAdmin
-                                    ? "Administrador principal não pode ser removido"
-                                    : "Remover Usuário"
-                                }
-                              >
-                                <MdDelete size={18} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {usuarios.length === 0 && !carregando && (
-                      <tr>
-                        <td colSpan={6} className="text-center py-8 text-gray-500 text-xs">
-                          Nenhum usuário encontrado para os filtros selecionados.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <Select
+              value={filtroFuncaoUsuario}
+              onChange={(e) => setFiltroFuncaoUsuario(e.target.value)}
+            >
+              <option value="">Todas as Funções</option>
+              <option value="Adm">Adm</option>
+              <option value="Gerente">Gerente</option>
+              <option value="Garcom">Garçom</option>
+              <option value="Cozinheiro">Cozinheiro</option>
+            </Select>
           </div>
-        )}
-      </main>
 
-      {/* Modais */}
+          <DataTable
+            columns={colunasUsuarios}
+            rows={usuarios}
+            rowKey={(u) => u.idUsuario}
+            loading={carregandoUsers}
+            loadingLabel="Carregando usuários..."
+            emptyIcon={MdPeople}
+            emptyTitle="Nenhum usuário encontrado"
+            emptyDescription="Ajuste os filtros ou cadastre um novo membro."
+          />
+        </div>
+      )}
+
       {modalNovoRest && (
         <ModalNovoRestaurante
           onClose={() => setModalNovoRest(false)}
           onSuccess={() => {
             setModalNovoRest(false);
-            dispararSucesso("Restaurante e usuário inicial criados com sucesso!");
+            toast.success(
+              "Restaurante e usuário inicial criados com sucesso!"
+            );
             carregarRestaurantes();
             carregarUsuarios();
           }}
@@ -651,7 +604,7 @@ function TelaAdministrador() {
           onClose={() => setModalEditRest(null)}
           onSuccess={() => {
             setModalEditRest(null);
-            dispararSucesso("Restaurante atualizado com sucesso!");
+            toast.success("Restaurante atualizado com sucesso!");
             carregarRestaurantes();
           }}
         />
@@ -664,7 +617,7 @@ function TelaAdministrador() {
           onClose={() => setModalNovoUser(false)}
           onSuccess={() => {
             setModalNovoUser(false);
-            dispararSucesso("Usuário cadastrado com sucesso!");
+            toast.success("Usuário cadastrado com sucesso!");
             carregarUsuarios();
           }}
         />
@@ -676,7 +629,7 @@ function TelaAdministrador() {
           onClose={() => setModalEditUser(null)}
           onSuccess={() => {
             setModalEditUser(null);
-            dispararSucesso("Dados do usuário atualizados com sucesso!");
+            toast.success("Dados do usuário atualizados com sucesso!");
             carregarUsuarios();
           }}
         />
@@ -688,31 +641,11 @@ function TelaAdministrador() {
           onClose={() => setModalResetSenha(null)}
           onSuccess={() => {
             setModalResetSenha(null);
-            dispararSucesso("Senha do usuário redefinida com sucesso!");
+            toast.success("Senha do usuário redefinida com sucesso!");
           }}
         />
       )}
-
-      {/* Modais de Alerta e Confirmação */}
-      <ModalAlerta
-        aberto={alerta.aberto}
-        titulo={alerta.titulo}
-        mensagem={alerta.mensagem}
-        tipo={alerta.tipo}
-        onFechar={() => setAlerta((a) => ({ ...a, aberto: false }))}
-      />
-
-      <ModalConfirmacao
-        aberto={confirmacao.aberto}
-        titulo={confirmacao.titulo}
-        mensagem={confirmacao.mensagem}
-        detalhes={confirmacao.detalhes}
-        tipo={confirmacao.tipo}
-        textoConfirmar={confirmacao.textoConfirmar}
-        onConfirmar={confirmacao.onConfirmar}
-        onCancelar={() => setConfirmacao((c) => ({ ...c, aberto: false }))}
-      />
-    </div>
+    </AppShell>
   );
 }
 

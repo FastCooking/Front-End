@@ -1,23 +1,34 @@
-import {useState} from "react";
-
-import FormularioInsumo from "../components/insumos/FormularioInsumo.jsx";
+import { useState } from "react";
+import { MdAddBox, MdInventory2, MdMenuBook } from "react-icons/md";
+import { useNavigate } from "react-router-dom";
 import FormularioFichaTecnica from "../components/insumos/FormularioFichaTec.jsx";
+import FormularioInsumo from "../components/insumos/FormularioInsumo.jsx";
 import ListaInsumo from "../components/insumos/ListaInsumo.jsx";
+import AppShell from "../components/layout/AppShell.jsx";
 
-import Navbar from "../components/layout/Navbar.jsx";
+const SECOES_INSUMO = [
+  { id: "cadastro", label: "Cadastrar Insumo", icon: MdAddBox },
+  { id: "ficha", label: "Ficha Técnica", icon: MdMenuBook },
+  { id: "lista", label: "Lista de Insumos", icon: MdInventory2 },
+];
 
 function TelaInsumo() {
-    const[abaAtual, setAbaAtual] = useState("cadastro");
+  const [abaAtual, setAbaAtual] = useState("cadastro");
+  const navigate = useNavigate();
 
-    return (
-        <div className="min-h-screen bg-linear-to-r from-[#F9ECE5] to-[#D4C8C0] pt-25">
-            <Navbar abaAtual={abaAtual} setAbaAtual={setAbaAtual} />
-            
-            {abaAtual === "cadastro" && <FormularioInsumo />}
-            {abaAtual === "ficha" && <FormularioFichaTecnica />}
-            {abaAtual === "lista" && <ListaInsumo />}
-        </div>
-    );
+  return (
+    <AppShell
+      modulo="Gestão de Insumos"
+      secoes={SECOES_INSUMO}
+      secaoAtiva={abaAtual}
+      onSecao={setAbaAtual}
+      onLogout={() => navigate("/login")}
+    >
+      {abaAtual === "cadastro" && <FormularioInsumo />}
+      {abaAtual === "ficha" && <FormularioFichaTecnica />}
+      {abaAtual === "lista" && <ListaInsumo />}
+    </AppShell>
+  );
 }
 
 export default TelaInsumo;

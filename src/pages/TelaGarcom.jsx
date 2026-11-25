@@ -1,130 +1,164 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  MdRestaurantMenu,
-  MdNotificationsActive,
-  MdTableBar,
+  MdAdd,
   MdCheckCircle,
   MdClose,
-  MdAdd,
-  MdRemove,
+  MdNotificationsActive,
   MdPayment,
   MdRefresh,
-  MdLogout,
-  MdAccessTime,
-  MdDinnerDining,
+  MdRemove,
+  MdRestaurantMenu,
   MdRoomService,
-} from 'react-icons/md';
+  MdTableBar,
+} from "react-icons/md";
+import { useNavigate } from "react-router-dom";
 
+import ModalAdicionarItemCardapio from "../components/garcom/ModalAdicionarItemCardapio";
+import ModalPagamentoComanda from "../components/garcom/ModalPagamentoComanda";
+import AppShell from "../components/layout/AppShell";
 import {
-  alterarStatusItem,
-  alterarQuantidadeItem,
-  concluirEntrega,
-  obterFilaEntregasProntas,
-  listarMesas,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  Modal,
+  PageHeader,
+  StatusBadge,
+  useConfirm,
+  useToast,
+} from "../components/ui";
+import { API_BASE } from "../config/api";
+import {
   abrirMesa,
-  cancelarItemPedido,
-  atenderChamadoMesa,
-  obterChamadosAtivos,
-  obterPedidoAtivoMesa,
   adicionarItensAoPedido,
-} from '../services/pedidoService';
-import logo from '../assets/fast cooking logo.png';
-import { tocarAlertaSonoro } from '../utils/audioNotification';
-import ModalAlerta from '../components/common/ModalAlerta';
-import ModalConfirmacao from '../components/common/ModalConfirmacao';
-import ModalAdicionarItemCardapio from '../components/garcom/ModalAdicionarItemCardapio';
-import ModalPagamentoComanda from '../components/garcom/ModalPagamentoComanda';
-
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
+  alterarQuantidadeItem,
+  atenderChamadoMesa,
+  cancelarItemPedido,
+  concluirEntrega,
+  listarMesas,
+  obterChamadosAtivos,
+  obterFilaEntregasProntas,
+  obterPedidoAtivoMesa,
+} from "../services/pedidoService";
+import { tocarAlertaSonoro } from "../utils/audioNotification";
 
 function buildWsUrl() {
-  const wsBase = BASE_URL.replace(/^http/, 'ws');
+  const wsBase = API_BASE.replace(/^http/, "ws");
   return `${wsBase}/pedidos/ws`;
+}
+
+function decodeJwtPayload() {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(
+      base64.length + ((4 - (base64.length % 4)) % 4),
+      "="
+    );
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function normalizarItemPronto(it) {
+  return {
+    idItemPedido: it.idItemPedido || it.itemId || it.id,
+    deliveryId: it.deliveryId || null,
+    nomeItem: it.nomeItem || it.itemName || it.nome || "Prato",
+    quantidade: it.quantidade ?? it.quantity ?? 1,
+    numeroMesa: it.numeroMesa ?? it.tableNumber ?? "—",
+    idMesa: it.idMesa || null,
+    status: it.status || "Pronto",
+    observacao: it.observacao ?? it.notes ?? "",
+  };
 }
 
 export default function TelaGarcom() {
   const navigate = useNavigate();
+  const toast = useToast();
+  const confirm = useConfirm();
 
-  // Estados principais
   const [pratosProntos, setPratosProntos] = useState([]);
   const [mesas, setMesas] = useState([]);
   const [chamadosMesa, setChamadosMesa] = useState([]);
-  const [statusConexao, setStatusConexao] = useState('CONECTANDO');
-  const [usuario, setUsuario] = useState(null);
+  const [statusConexao, setStatusConexao] = useState("CONECTANDO");
+  const [usuario] = useState(() => {
+    try {
+      const userStr = localStorage.getItem("user");
+      const parsed = userStr ? JSON.parse(userStr) : null;
+      const jwtPayload = decodeJwtPayload();
+      if (parsed && !parsed.idRestaurante && jwtPayload?.idRestaurante) {
+        return { ...parsed, idRestaurante: jwtPayload.idRestaurante };
+      }
+      if (!parsed && jwtPayload) {
+        return {
+          idUsuario: jwtPayload.sub,
+          idRestaurante: jwtPayload.idRestaurante,
+          funcao: jwtPayload.funcao,
+        };
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  });
   const [processando, setProcessando] = useState(false);
   const [itemEmAtualizacao, setItemEmAtualizacao] = useState(null);
 
-  // Modais de detalhe e ação
   const [comandaModal, setComandaModal] = useState(null);
   const [carregandoComanda, setCarregandoComanda] = useState(false);
   const [modalAdicionarAberto, setModalAdicionarAberto] = useState(false);
   const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
-
-  // Modais customizados de feedback (substituindo alert/confirm)
-  const [alerta, setAlerta] = useState({ aberto: false, titulo: '', mensagem: '', tipo: 'info' });
-  const [confirmacao, setConfirmacao] = useState({
-    aberto: false,
-    titulo: '',
-    mensagem: '',
-    detalhes: null,
-    tipo: 'aviso',
-    onConfirmar: null,
-  });
+  const [modalCancelamentoItem, setModalCancelamentoItem] = useState(null);
+  const [justificativaCancelamento, setJustificativaCancelamento] =
+    useState("");
 
   const wsRef = useRef(null);
   const isMountedRef = useRef(true);
+  const reconnectTimerRef = useRef(null);
   const ultimosChamadosIdsRef = useRef(new Set());
   const carregarMesasRef = useRef(null);
 
-  // Autenticação e RBAC
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const funcao = (localStorage.getItem('funcao') || '').toLowerCase();
+    const token = localStorage.getItem("token");
+    const funcao = (localStorage.getItem("funcao") || "").toLowerCase();
 
     if (!token) {
-      navigate('/login');
+      navigate("/login");
       return;
     }
 
-    if (funcao !== 'garcom') {
-      if (funcao === 'cozinheiro' || funcao === 'cozinha') navigate('/cozinha');
-      else if (funcao === 'gerente') navigate('/gerente');
-      else if (funcao === 'adm') navigate('/administrativo');
-      else navigate('/login');
+    if (funcao !== "garcom") {
+      if (funcao === "cozinheiro" || funcao === "cozinha") navigate("/cozinha");
+      else if (funcao === "gerente") navigate("/gerente");
+      else if (funcao === "adm") navigate("/administrativo");
+      else navigate("/login");
     }
   }, [navigate]);
 
-  // Carrega usuário autenticado
-  useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        setUsuario(JSON.parse(userStr));
-      } catch (e) {
-        // ignore
-      }
-    }
-  }, []);
+  const idRestaurante = usuario?.idRestaurante;
 
   const carregarMesas = useCallback(async () => {
     try {
-      const idRestaurante = usuario?.idRestaurante;
       const data = await listarMesas(idRestaurante).catch(() => []);
       setMesas(data || []);
-    } catch (err) {
-      console.warn('Erro ao carregar mesas:', err);
+    } catch {
+      // Silencia erro transitório
     }
-  }, [usuario]);
+  }, [idRestaurante]);
 
   const carregarChamados = useCallback(async () => {
     try {
-      const idRestaurante = usuario?.idRestaurante;
       if (!idRestaurante) return;
       const data = await obterChamadosAtivos(idRestaurante).catch(() => []);
       const lista = data || [];
 
-      // Checa se há novo chamado para tocar som e alertar
       let temNovo = false;
       lista.forEach((c) => {
         if (!ultimosChamadosIdsRef.current.has(c.idMesa)) {
@@ -138,260 +172,266 @@ export default function TelaGarcom() {
       }
 
       setChamadosMesa(lista);
-    } catch (err) {
-      console.warn('Erro ao carregar chamados das mesas:', err);
+    } catch {
+      // Silencia erro transitório
     }
-  }, [usuario]);
+  }, [idRestaurante]);
 
   const carregarPratosProntos = useCallback(async () => {
     try {
       const fila = await obterFilaEntregasProntas();
       if (Array.isArray(fila)) {
-        setPratosProntos(
-          fila.map((it) => ({
-            idItemPedido: it.idItemPedido,
-            deliveryId: it.deliveryId,
-            nomeItem: it.nomeItem || it.nome,
-            quantidade: it.quantidade,
-            numeroMesa: it.numeroMesa,
-            idMesa: it.idMesa,
-            status: it.status || 'Pronto',
-            observacao: it.observacao,
-          }))
-        );
+        setPratosProntos(fila.map(normalizarItemPronto));
       }
-    } catch (err) {
-      console.warn('Erro ao carregar fila de pratos prontos:', err);
+    } catch {
+      // Silencia erro transitório
     }
   }, []);
 
-  // Carregamento inicial e Polling de 5 segundos para chamados e pratos prontos
   useEffect(() => {
     carregarMesasRef.current = carregarMesas;
   }, [carregarMesas]);
 
   useEffect(() => {
-    carregarMesas();
-    carregarChamados();
-    carregarPratosProntos();
+    let ativo = true;
+    Promise.resolve().then(() => {
+      if (ativo) {
+        carregarMesas();
+        carregarChamados();
+        carregarPratosProntos();
+      }
+    });
 
     const interval = setInterval(() => {
       carregarChamados();
       carregarPratosProntos();
     }, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      ativo = false;
+      clearInterval(interval);
+    };
   }, [carregarMesas, carregarChamados, carregarPratosProntos]);
-
-  // Conexão WebSocket para Garçom
-  const conectarWs = useCallback(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    try {
-      const ws = new WebSocket(buildWsUrl());
-      wsRef.current = ws;
-      setStatusConexao('CONECTANDO');
-
-      ws.onopen = () => {
-        if (!isMountedRef.current) return;
-        setStatusConexao('CONECTADO');
-        ws.send(JSON.stringify({ type: 'authenticate', token }));
-      };
-
-      ws.onmessage = (event) => {
-        if (!isMountedRef.current) return;
-        try {
-          const payload = JSON.parse(event.data);
-
-          // Prato pronto liberado para entrega
-          if (payload.type === 'item.status_changed' && payload.item) {
-            const item = payload.item;
-            if (item.status === 'Pronto') {
-              setPratosProntos((prev) => {
-                const existe = prev.some((p) => p.idItemPedido === item.idItemPedido);
-                if (existe) return prev;
-                return [item, ...prev];
-              });
-              tocarAlertaSonoro();
-            } else if (item.status === 'Entregue' || item.status === 'Cancelado') {
-              setPratosProntos((prev) =>
-                prev.filter((p) => p.idItemPedido !== item.idItemPedido)
-              );
-            }
-
-            // Atualiza comanda ativa caso aberta no modal
-            setComandaModal((prev) => {
-              if (!prev || !prev.itens) return prev;
-              const afetaModal = prev.itens.some((it) => it.idItemPedido === item.idItemPedido);
-              if (!afetaModal) return prev;
-              return {
-                ...prev,
-                itens: prev.itens.map((it) =>
-                  it.idItemPedido === item.idItemPedido ? { ...it, status: item.status } : it
-                ),
-              };
-            });
-          }
-
-          if (
-            payload.type === 'kds:item_ready' ||
-            payload.type === 'delivery:claimed' ||
-            payload.type === 'queue.updated'
-          ) {
-            carregarPratosProntos();
-            if (payload.type === 'kds:item_ready') {
-              tocarAlertaSonoro();
-            }
-          }
-
-          // Chamados de mesa em tempo real
-          if (payload.type === 'mesa.garcom_chamado' && payload.mesa) {
-            const mesaChamada = payload.mesa;
-            setChamadosMesa((prev) => {
-              const existe = prev.some((c) => c.idMesa === mesaChamada.idMesa);
-              if (existe) return prev;
-              return [mesaChamada, ...prev];
-            });
-            ultimosChamadosIdsRef.current.add(mesaChamada.idMesa);
-            tocarAlertaSonoro();
-          } else if (payload.type === 'mesa.garcom_atendido' && payload.mesa) {
-            const mesaChamada = payload.mesa;
-            setChamadosMesa((prev) =>
-              prev.filter((c) => c.idMesa !== mesaChamada.idMesa)
-            );
-            ultimosChamadosIdsRef.current.delete(mesaChamada.idMesa);
-          }
-
-          // Atualizações de status das mesas e pedidos em tempo real
-          if (
-            payload.type === 'table.opened' ||
-            payload.type === 'table.status_changed' ||
-            payload.type === 'order.closed' ||
-            payload.type === 'order.created'
-          ) {
-            const idMesa = payload.idMesa || payload.mesa?.idMesa;
-            const novoStatus = payload.status || payload.mesa?.status;
-            if (idMesa && novoStatus) {
-              setMesas((prev) =>
-                prev.map((m) =>
-                  String(m.idMesa) === String(idMesa) ? { ...m, status: novoStatus } : m
-                )
-              );
-            }
-            carregarMesasRef.current?.();
-          }
-        } catch {
-          // ignore
-        }
-      };
-
-      ws.onclose = () => {
-        if (!isMountedRef.current) return;
-        setStatusConexao('DESCONECTADO');
-        setTimeout(() => {
-          if (isMountedRef.current) conectarWs();
-        }, 3000);
-      };
-
-      ws.onerror = () => {
-        if (!isMountedRef.current) return;
-        setStatusConexao('ERRO');
-      };
-    } catch {
-      setStatusConexao('ERRO');
-    }
-  }, []);
 
   useEffect(() => {
     isMountedRef.current = true;
-    conectarWs();
+
+    function abrirSocket() {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+
+      try {
+        const ws = new WebSocket(buildWsUrl());
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (!isMountedRef.current) return;
+          setStatusConexao("CONECTADO");
+          ws.send(JSON.stringify({ type: "authenticate", token }));
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMountedRef.current) return;
+          try {
+            const payload = JSON.parse(event.data);
+
+            const eventType = payload.type || payload.event;
+
+            if (eventType === "item.status_changed" && payload.item) {
+              const item = normalizarItemPronto(payload.item);
+              if (payload.item.status === "Pronto") {
+                setPratosProntos((prev) => {
+                  const existe = prev.some(
+                    (p) => p.idItemPedido === item.idItemPedido
+                  );
+                  if (existe) return prev;
+                  return [item, ...prev];
+                });
+                tocarAlertaSonoro();
+              } else if (
+                payload.item.status === "Entregue" ||
+                payload.item.status === "Cancelado"
+              ) {
+                setPratosProntos((prev) =>
+                  prev.filter((p) => p.idItemPedido !== item.idItemPedido)
+                );
+              }
+
+              setComandaModal((prev) => {
+                if (!prev || !prev.itens) return prev;
+                const afetaModal = prev.itens.some(
+                  (it) => it.idItemPedido === item.idItemPedido
+                );
+                if (!afetaModal) return prev;
+                return {
+                  ...prev,
+                  itens: prev.itens.map((it) =>
+                    it.idItemPedido === item.idItemPedido
+                      ? { ...it, status: payload.item.status }
+                      : it
+                  ),
+                };
+              });
+            }
+
+            if (
+              eventType === "kds:item_ready" ||
+              eventType === "delivery:claimed" ||
+              eventType === "queue.updated"
+            ) {
+              carregarPratosProntos();
+              if (eventType === "kds:item_ready") {
+                tocarAlertaSonoro();
+              }
+            }
+
+            if (payload.type === "mesa.garcom_chamado" && payload.mesa) {
+              const mesaChamada = payload.mesa;
+              setChamadosMesa((prev) => {
+                const existe = prev.some(
+                  (c) => c.idMesa === mesaChamada.idMesa
+                );
+                if (existe) return prev;
+                return [mesaChamada, ...prev];
+              });
+              ultimosChamadosIdsRef.current.add(mesaChamada.idMesa);
+              tocarAlertaSonoro();
+            } else if (
+              payload.type === "mesa.garcom_atendido" &&
+              payload.mesa
+            ) {
+              const mesaChamada = payload.mesa;
+              setChamadosMesa((prev) =>
+                prev.filter((c) => c.idMesa !== mesaChamada.idMesa)
+              );
+              ultimosChamadosIdsRef.current.delete(mesaChamada.idMesa);
+            }
+
+            if (
+              payload.type === "table.opened" ||
+              payload.type === "table.status_changed" ||
+              payload.type === "order.closed" ||
+              payload.type === "order.created"
+            ) {
+              const idMesaEvento = payload.idMesa || payload.mesa?.idMesa;
+              const novoStatus = payload.status || payload.mesa?.status;
+              if (idMesaEvento && novoStatus) {
+                setMesas((prev) =>
+                  prev.map((m) =>
+                    String(m.idMesa) === String(idMesaEvento)
+                      ? { ...m, status: novoStatus }
+                      : m
+                  )
+                );
+              }
+              carregarMesasRef.current?.();
+            }
+          } catch {
+            // Ignora payload malformado
+          }
+        };
+
+        ws.onclose = () => {
+          if (!isMountedRef.current) return;
+          setStatusConexao("DESCONECTADO");
+          reconnectTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) abrirSocket();
+          }, 3000);
+        };
+
+        ws.onerror = () => {
+          if (!isMountedRef.current) return;
+          setStatusConexao("ERRO");
+        };
+      } catch {
+        setStatusConexao("ERRO");
+      }
+    }
+
+    Promise.resolve().then(() => {
+      if (isMountedRef.current) abrirSocket();
+    });
 
     return () => {
       isMountedRef.current = false;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (wsRef.current) wsRef.current.close();
     };
-  }, [conectarWs]);
+  }, [carregarPratosProntos]);
 
-  // Ações de atendimento e entrega
   async function confirmarEntrega(item) {
-    setConfirmacao({
-      aberto: true,
-      titulo: 'Confirmar Entrega de Item',
-      mensagem: `Deseja registrar que o item "${item.nomeItem || 'Prato'}" (${item.quantidade}x) foi entregue na Mesa #${item.numeroMesa}?`,
-      detalhes: `Garçom responsável: ${usuario?.nome || 'Garçom'}`,
-      tipo: 'info',
-      textoConfirmar: 'Confirmar Entrega',
-      onConfirmar: async () => {
-        setProcessando(true);
-        try {
-          await concluirEntrega(item.deliveryId || item.idItemPedido);
-          setPratosProntos((prev) => prev.filter((p) => p.idItemPedido !== item.idItemPedido));
-          setComandaModal((prev) => {
-            if (!prev || !prev.itens) return prev;
-            return {
-              ...prev,
-              itens: prev.itens.map((it) =>
-                it.idItemPedido === item.idItemPedido ? { ...it, status: 'Entregue' } : it
-              ),
-            };
-          });
-          setConfirmacao({ aberto: false });
-          setAlerta({
-            aberto: true,
-            titulo: 'Entrega Registrada',
-            mensagem: `O item foi marcado como Entregue na Mesa #${item.numeroMesa}.`,
-            tipo: 'sucesso',
-          });
-        } catch (err) {
-          setAlerta({
-            aberto: true,
-            titulo: 'Erro ao entregar',
-            mensagem: err.message || 'Não foi possível registrar a entrega.',
-            tipo: 'erro',
-          });
-        } finally {
-          setProcessando(false);
-        }
-      },
+    const ok = await confirm({
+      title: "Confirmar Entrega de Item",
+      message: `Deseja registrar que o item "${item.nomeItem || "Prato"}" (${
+        item.quantidade
+      }x) foi entregue na Mesa #${item.numeroMesa}?`,
+      confirmText: "Confirmar Entrega",
+      tone: "primary",
     });
+    if (!ok) return;
+
+    setProcessando(true);
+    try {
+      const targetId = item.deliveryId || item.idItemPedido || item.itemId;
+      await concluirEntrega(targetId);
+      setPratosProntos((prev) =>
+        prev.filter(
+          (p) =>
+            p.idItemPedido !== item.idItemPedido &&
+            (!item.deliveryId || p.deliveryId !== item.deliveryId)
+        )
+      );
+      setComandaModal((prev) => {
+        if (!prev || !prev.itens) return prev;
+        return {
+          ...prev,
+          itens: prev.itens.map((it) =>
+            it.idItemPedido === item.idItemPedido
+              ? { ...it, status: "Entregue" }
+              : it
+          ),
+        };
+      });
+      toast.success(
+        `Item marcado como Entregue na Mesa #${item.numeroMesa}.`
+      );
+    } catch (err) {
+      toast.error(err.message || "Não foi possível registrar a entrega.");
+    } finally {
+      setProcessando(false);
+    }
   }
 
   async function handleAbrirMesa(idMesa, numeroMesa) {
-    setConfirmacao({
-      aberto: true,
-      titulo: 'Abrir Mesa',
-      mensagem: `Confirmar abertura e início de sessão da Mesa #${numeroMesa}?`,
-      tipo: 'info',
-      textoConfirmar: 'Abrir Mesa',
-      onConfirmar: async () => {
-        setProcessando(true);
-        try {
-          await abrirMesa(idMesa);
-          setConfirmacao({ aberto: false });
-          setMesas((prev) =>
-            prev.map((m) =>
-              String(m.idMesa) === String(idMesa) ? { ...m, status: 'Indisponivel' } : m
-            )
-          );
-          carregarMesas();
-        } catch (err) {
-          setConfirmacao({ aberto: false });
-          setAlerta({
-            aberto: true,
-            titulo: 'Erro ao abrir mesa',
-            mensagem: err.message || 'Não foi possível abrir a mesa.',
-            tipo: 'erro',
-          });
-        } finally {
-          setProcessando(false);
-        }
-      },
+    const ok = await confirm({
+      title: "Abrir Mesa",
+      message: `Confirmar abertura e início de sessão da Mesa #${numeroMesa}?`,
+      confirmText: "Abrir Mesa",
+      tone: "primary",
     });
+    if (!ok) return;
+
+    setProcessando(true);
+    try {
+      await abrirMesa(idMesa);
+      setMesas((prev) =>
+        prev.map((m) =>
+          String(m.idMesa) === String(idMesa)
+            ? { ...m, status: "Indisponivel" }
+            : m
+        )
+      );
+      toast.success(`Mesa #${numeroMesa} aberta com sucesso!`);
+      carregarMesas();
+    } catch (err) {
+      toast.error(err.message || "Não foi possível abrir a mesa.");
+    } finally {
+      setProcessando(false);
+    }
   }
 
   async function handleAtenderChamado(idMesa) {
@@ -400,13 +440,11 @@ export default function TelaGarcom() {
       await atenderChamadoMesa(idMesa);
       setChamadosMesa((prev) => prev.filter((c) => c.idMesa !== idMesa));
       ultimosChamadosIdsRef.current.delete(idMesa);
+      toast.success("Chamado atendido!");
     } catch (err) {
-      setAlerta({
-        aberto: true,
-        titulo: 'Erro ao atender chamado',
-        mensagem: err.message || 'Não foi possível registrar atendimento do chamado.',
-        tipo: 'erro',
-      });
+      toast.error(
+        err.message || "Não foi possível registrar atendimento do chamado."
+      );
     } finally {
       setProcessando(false);
     }
@@ -421,62 +459,83 @@ export default function TelaGarcom() {
         pedido: dados.pedido || dados,
         itens: dados.itens || [],
       });
-    } catch (err) {
-      setAlerta({
-        aberto: true,
-        titulo: 'Comanda não encontrada',
-        mensagem: `Não há pedido ativo ou comanda aberta para a Mesa #${mesa.numero}.`,
-        tipo: 'aviso',
-      });
+    } catch {
+      toast.warning(
+        `Não há pedido ativo ou comanda aberta para a Mesa #${mesa.numero}.`
+      );
     } finally {
       setCarregandoComanda(false);
     }
   }
 
-  // Alteração de quantidade de item pendente
+  const SUGESTOES_JUSTIFICATIVA_CANCELAMENTO = [
+    "Solicitação do cliente",
+    "Item lançado por engano",
+    "Demora no preparo",
+    "Troca de prato pelo cliente",
+  ];
+
+  function abrirModalCancelarItem(
+    item,
+    motivoPadrao = "Cancelado pelo garçom no atendimento da mesa"
+  ) {
+    setJustificativaCancelamento("");
+    setModalCancelamentoItem({
+      item,
+      motivoPadrao,
+    });
+  }
+
+  async function confirmarCancelamentoComJustificativa() {
+    if (!modalCancelamentoItem?.item) return;
+    const { item, motivoPadrao } = modalCancelamentoItem;
+    const motivoFinal =
+      justificativaCancelamento.trim() ||
+      motivoPadrao ||
+      "Cancelado pelo garçom no atendimento da mesa";
+
+    setItemEmAtualizacao(item.idItemPedido);
+    setProcessando(true);
+    try {
+      await cancelarItemPedido(item.idItemPedido, motivoFinal);
+      setComandaModal((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          itens: prev.itens.map((it) =>
+            it.idItemPedido === item.idItemPedido
+              ? { ...it, status: "Cancelado" }
+              : it
+          ),
+        };
+      });
+      setModalCancelamentoItem(null);
+      setJustificativaCancelamento("");
+      toast.success("O item foi cancelado com sucesso.");
+    } catch (err) {
+      toast.error(err.message || "Não foi possível cancelar o item.");
+    } finally {
+      setItemEmAtualizacao(null);
+      setProcessando(false);
+    }
+  }
+
   async function handleAlterarQuantidade(item, novaQuantidade) {
     if (novaQuantidade <= 0) {
-      setConfirmacao({
-        aberto: true,
-        titulo: 'Cancelar Item',
-        mensagem: `A quantidade foi reduzida a zero. Deseja realmente cancelar o item "${item.nomeItem || 'Item'}"?`,
-        tipo: 'perigo',
-        textoConfirmar: 'Sim, Cancelar Item',
-        onConfirmar: async () => {
-          setItemEmAtualizacao(item.idItemPedido);
-          setProcessando(true);
-          try {
-            await cancelarItemPedido(item.idItemPedido);
-            setConfirmacao({ aberto: false });
-            setComandaModal((prev) => {
-              if (!prev) return null;
-              return {
-                ...prev,
-                itens: prev.itens.map((it) =>
-                  it.idItemPedido === item.idItemPedido ? { ...it, status: 'Cancelado' } : it
-                ),
-              };
-            });
-          } catch (err) {
-            setAlerta({
-              aberto: true,
-              titulo: 'Erro ao cancelar',
-              mensagem: err.message || 'Não foi possível cancelar o item.',
-              tipo: 'erro',
-            });
-          } finally {
-            setItemEmAtualizacao(null);
-            setProcessando(false);
-          }
-        },
-      });
+      abrirModalCancelarItem(
+        item,
+        "Quantidade reduzida a zero pelo garçom no atendimento da mesa"
+      );
       return;
     }
 
     setItemEmAtualizacao(item.idItemPedido);
     setProcessando(true);
     try {
-      const res = await alterarQuantidadeItem(item.idItemPedido, novaQuantidade);
+      const res = await alterarQuantidadeItem(
+        item.idItemPedido,
+        novaQuantidade
+      );
       setComandaModal((prev) => {
         if (!prev) return null;
         return {
@@ -489,145 +548,74 @@ export default function TelaGarcom() {
         };
       });
     } catch (err) {
-      setAlerta({
-        aberto: true,
-        titulo: 'Não foi possível alterar quantidade',
-        mensagem: err.message || 'Erro ao alterar quantidade do item.',
-        tipo: 'erro',
-      });
+      toast.error(err.message || "Erro ao alterar quantidade do item.");
     } finally {
       setItemEmAtualizacao(null);
       setProcessando(false);
     }
   }
 
-  // Cancelamento direto de item pendente
-  async function handleCancelarItem(item) {
-    setConfirmacao({
-      aberto: true,
-      titulo: 'Cancelar Item do Pedido',
-      mensagem: `Deseja realmente cancelar o item "${item.nomeItem || 'Item'}" (Qtd: ${item.quantidade}) da Mesa #${comandaModal?.mesa?.numero}?`,
-      tipo: 'perigo',
-      textoConfirmar: 'Cancelar Item',
-      onConfirmar: async () => {
-        setItemEmAtualizacao(item.idItemPedido);
-        setProcessando(true);
-        try {
-          await cancelarItemPedido(item.idItemPedido);
-          setConfirmacao({ aberto: false });
-          setComandaModal((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              itens: prev.itens.map((it) =>
-                it.idItemPedido === item.idItemPedido ? { ...it, status: 'Cancelado' } : it
-              ),
-            };
-          });
-          setAlerta({
-            aberto: true,
-            titulo: 'Item Cancelado',
-            mensagem: 'O item foi cancelado com sucesso.',
-            tipo: 'sucesso',
-          });
-        } catch (err) {
-          setAlerta({
-            aberto: true,
-            titulo: 'Erro ao cancelar',
-            mensagem: err.message || 'Não foi possível cancelar o item.',
-            tipo: 'erro',
-          });
-        } finally {
-          setItemEmAtualizacao(null);
-          setProcessando(false);
-        }
-      },
-    });
+  function handleCancelarItem(item) {
+    abrirModalCancelarItem(
+      item,
+      "Cancelado pelo garçom no atendimento da mesa"
+    );
   }
 
-  // Inclusão de itens pelo garçom
   async function handleItensAdicionados(itens) {
     if (!comandaModal?.pedido?.idPedido) return;
     await adicionarItensAoPedido(comandaModal.pedido.idPedido, itens);
-    // Recarrega os itens da comanda
     const dados = await obterPedidoAtivoMesa(comandaModal.mesa.idMesa);
     setComandaModal({
       mesa: comandaModal.mesa,
       pedido: dados.pedido || dados,
       itens: dados.itens || [],
     });
-    setAlerta({
-      aberto: true,
-      titulo: 'Itens Adicionados',
-      mensagem: 'Os itens foram incluídos no pedido com sucesso!',
-      tipo: 'sucesso',
-    });
+    toast.success("Os itens foram incluídos no pedido com sucesso!");
   }
 
   function handleLogout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    localStorage.removeItem('funcao');
-    navigate('/login');
+    localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("funcao");
+    navigate("/login");
   }
 
   return (
-    <div className="min-h-screen bg-[#FAF6F3] font-[Poppins] text-gray-800 pb-20">
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-[#FAF6F3]/95 backdrop-blur-md border-b border-gray-200/80 shadow-xs px-4 sm:px-6 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="FastCooking Logo" className="h-9 sm:h-10 w-auto object-contain" />
-            <div>
-              <h1 className="text-base sm:text-xl font-black text-[#9C1C0E] tracking-tight leading-tight">
-                FastCooking Atendimento
-              </h1>
-              <p className="text-[11px] sm:text-xs text-gray-500 font-medium">
-                Garçom: <strong className="text-gray-700">{usuario?.nome || 'Atendente'}</strong>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Status Conexão */}
-            <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-full bg-white border border-gray-200 shadow-xs">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  statusConexao === 'CONECTADO'
-                    ? 'bg-emerald-500 animate-pulse'
-                    : 'bg-[#B78A10]'
-                }`}
-              />
-              <span className="text-gray-600 hidden xs:inline">
-                {statusConexao === 'CONECTADO' ? 'Tempo Real Ativo' : 'Conectando...'}
-              </span>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="text-xs bg-white hover:bg-gray-100 text-gray-700 hover:text-[#9C1C0E] px-3 py-1.5 rounded-xl font-bold border border-gray-200 shadow-xs transition-all cursor-pointer flex items-center gap-1"
-            >
-              <MdLogout size={15} />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
-          </div>
+    <AppShell
+      modulo="Atendimento do Salão"
+      restauranteNome={usuario?.nome ? `Garçom: ${usuario.nome}` : undefined}
+      onLogout={handleLogout}
+      headerActions={
+        <div className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-white border border-gray-200 shadow-xs">
+          <span
+            className={`w-2 h-2 rounded-full ${
+              statusConexao === "CONECTADO" ? "bg-emerald-500" : "bg-gold"
+            }`}
+          />
+          <span className="text-gray-600 hidden xs:inline">
+            {statusConexao === "CONECTADO" ? "Tempo Real" : "Reconectando"}
+          </span>
         </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 sm:space-y-8">
+      }
+    >
+      <div className="space-y-6 sm:space-y-8">
         {/* Chamados Urgentes de Garçom */}
         {chamadosMesa.length > 0 && (
-          <section className="bg-gradient-to-r from-amber-500/15 via-[#B78A10]/15 to-amber-500/10 border-2 border-[#B78A10] rounded-3xl p-4 sm:p-5 shadow-md animate-fade-in">
+          <Card className="bg-amber-50 border-2 border-gold animate-fade-in">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base sm:text-lg font-black text-amber-950 flex items-center gap-2">
-                <MdNotificationsActive className="text-[#B78A10] animate-bounce" size={24} />
+                <MdNotificationsActive
+                  className="text-gold animate-pulse"
+                  size={24}
+                />
                 Chamados de Atendimento Urgentes
               </h2>
-              <span className="bg-[#B78A10] text-white text-xs font-black px-3 py-1 rounded-full animate-pulse">
-                {chamadosMesa.length} {chamadosMesa.length === 1 ? 'chamado' : 'chamados'}
-              </span>
+              <Badge tone="gold" className="animate-pulse">
+                {chamadosMesa.length}{" "}
+                {chamadosMesa.length === 1 ? "chamado" : "chamados"}
+              </Badge>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -640,70 +628,61 @@ export default function TelaGarcom() {
                     <span className="text-base sm:text-lg font-black text-gray-900">
                       Mesa #{chamado.numero}
                     </span>
-                    <p className="text-xs text-[#B78A10] font-bold mt-0.5">
+                    <p className="text-xs text-gold font-bold mt-0.5">
                       Cliente solicitando atendimento
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleAtenderChamado(chamado.idMesa)}
+                  <Button
+                    variant="gold"
+                    size="sm"
+                    icon={MdCheckCircle}
                     disabled={processando}
-                    className="bg-[#B78A10] hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                    onClick={() => handleAtenderChamado(chamado.idMesa)}
                   >
-                    <MdCheckCircle size={15} /> Atender
-                  </button>
+                    Atender
+                  </Button>
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
         )}
 
         {/* Pratos Prontos para Entrega na Mesa */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
-                <MdRoomService className="text-[#9C1C0E]" size={22} />
-                Pratos Prontos para Entrega
-              </h2>
-              <p className="text-xs text-gray-500 font-medium">
-                Pratos finalizados pela cozinha — Liberados para entrega no salão
-              </p>
-            </div>
-            <span className="bg-[#9C1C0E] text-white text-xs font-extrabold px-3 py-1 rounded-full">
-              {pratosProntos.length} prontos
-            </span>
-          </div>
+        <section className="space-y-4">
+          <PageHeader
+            title="Pratos Prontos para Entrega"
+            icon={MdRoomService}
+            badge={<Badge tone="brand">{pratosProntos.length} prontos</Badge>}
+          />
 
           {pratosProntos.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-dashed border-gray-300 p-8 sm:p-12 text-center text-gray-400">
-              <span className="text-3xl sm:text-4xl">✨</span>
-              <p className="text-sm sm:text-base font-bold text-gray-700 mt-2">
-                Nenhum prato aguardando entrega no momento
-              </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Assim que a cozinha concluir o preparo, o aviso soará automaticamente.
-              </p>
-            </div>
+            <Card>
+              <EmptyState
+                icon={MdRoomService}
+                title="Nenhum prato aguardando entrega no momento"
+                description="Assim que a cozinha concluir o preparo, o aviso soará automaticamente."
+              />
+            </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {pratosProntos.map((item) => (
-                <div
+                <Card
                   key={item.idItemPedido}
-                  className="bg-white border-2 border-emerald-500 rounded-3xl p-5 shadow-md flex flex-col justify-between"
+                  className="border-2 border-emerald-500 flex flex-col justify-between"
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-3 py-1 rounded-full">
-                        Mesa #{item.numeroMesa || '—'}
-                      </span>
+                      <Badge tone="success">
+                        Mesa #{item.numeroMesa || "—"}
+                      </Badge>
                       <span className="text-xs font-bold text-emerald-600 animate-pulse">
                         ● LIBERADO P/ ENTREGA
                       </span>
                     </div>
 
                     <h3 className="font-extrabold text-gray-900 text-base sm:text-lg mt-3 leading-tight">
-                      {item.quantidade}x {item.nomeItem || 'Prato'}
+                      {item.quantidade}x {item.nomeItem || "Prato"}
                     </h3>
 
                     {item.observacao && (
@@ -713,209 +692,231 @@ export default function TelaGarcom() {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => confirmarEntrega(item)}
+                  <Button
+                    size="sm"
+                    icon={MdCheckCircle}
                     disabled={processando}
-                    className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5 text-xs sm:text-sm"
+                    onClick={() => confirmarEntrega(item)}
+                    className="mt-4 w-full !bg-emerald-600 hover:!bg-emerald-700"
                   >
-                    <MdCheckCircle size={18} />
-                    <span>Confirmar Entrega na Mesa</span>
-                  </button>
-                </div>
+                    Confirmar Entrega na Mesa
+                  </Button>
+                </Card>
               ))}
             </div>
           )}
         </section>
 
         {/* Mesas do Salão */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
-                <MdTableBar className="text-[#9C1C0E]" size={22} />
-                Mesas do Salão
-              </h2>
-              <p className="text-xs text-gray-500 font-medium">
-                Status das mesas, comandas ativas e atendimento
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                carregarMesas();
-                carregarChamados();
-              }}
-              className="text-xs bg-white hover:bg-gray-100 text-gray-700 font-bold px-3 py-1.5 rounded-xl border border-gray-200 shadow-xs transition-all cursor-pointer flex items-center gap-1"
-            >
-              <MdRefresh size={16} /> Recarregar
-            </button>
-          </div>
+        <section className="space-y-4">
+          <PageHeader
+            title="Mesas do Salão"
+            icon={MdTableBar}
+            actions={
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={MdRefresh}
+                onClick={() => {
+                  carregarMesas();
+                  carregarChamados();
+                }}
+              >
+                Recarregar
+              </Button>
+            }
+          />
 
           {mesas.length === 0 ? (
-            <div className="bg-white rounded-3xl border border-gray-200 p-8 text-center text-gray-400">
-              <p className="text-sm">Nenhuma mesa cadastrada para este restaurante.</p>
-            </div>
+            <Card>
+              <EmptyState
+                icon={MdTableBar}
+                title="Nenhuma mesa cadastrada para este restaurante"
+              />
+            </Card>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
               {mesas.map((mesa) => {
-                const isOcupada = mesa.status === 'Indisponivel' || mesa.status === 'Ocupada';
-                const temChamado = chamadosMesa.some((c) => c.idMesa === mesa.idMesa);
+                const isOcupada =
+                  mesa.status === "Indisponivel" || mesa.status === "Ocupada";
+                const temChamado = chamadosMesa.some(
+                  (c) => c.idMesa === mesa.idMesa
+                );
 
                 return (
-                  <div
+                  <Card
                     key={mesa.idMesa}
-                    className={`rounded-2xl sm:rounded-3xl p-4 border flex flex-col justify-between text-center transition-all ${
+                    padding="p-4"
+                    className={`flex flex-col justify-between text-center ${
                       temChamado
-                        ? 'bg-amber-100/90 border-[#B78A10] ring-2 ring-[#B78A10] shadow-md animate-pulse'
+                        ? "bg-amber-50 border-gold ring-2 ring-gold animate-pulse"
                         : isOcupada
-                        ? 'bg-amber-50/70 border-amber-300 shadow-xs'
-                        : 'bg-white border-gray-200 hover:border-gray-300 shadow-xs'
+                        ? "bg-brand-soft/40 border-gold/40"
+                        : ""
                     }`}
                   >
                     <div>
                       <span className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
                         #{mesa.numero}
                       </span>
-                      <p
-                        className={`text-[11px] font-extrabold mt-1 ${
-                          temChamado
-                            ? 'text-amber-900'
-                            : isOcupada
-                            ? 'text-[#B78A10]'
-                            : 'text-emerald-700'
-                        }`}
-                      >
-                        {temChamado
-                          ? '🛎️ Chamando'
-                          : isOcupada
-                          ? 'Ocupada'
-                          : 'Disponível'}
-                      </p>
+                      <div className="mt-1 flex justify-center">
+                        {temChamado ? (
+                          <Badge tone="gold" icon={MdNotificationsActive}>
+                            Chamando
+                          </Badge>
+                        ) : (
+                          <StatusBadge
+                            status={isOcupada ? "Ocupada" : "Disponivel"}
+                          />
+                        )}
+                      </div>
                     </div>
 
                     <div className="mt-3 flex flex-col gap-1.5">
                       {!isOcupada ? (
-                        <button
-                          onClick={() => handleAbrirMesa(mesa.idMesa, mesa.numero)}
+                        <Button
+                          variant="secondary"
+                          size="xs"
                           disabled={processando}
-                          className="w-full text-xs bg-gray-900 hover:bg-black text-white font-bold py-1.5 rounded-xl transition-all cursor-pointer"
+                          onClick={() =>
+                            handleAbrirMesa(mesa.idMesa, mesa.numero)
+                          }
+                          className="w-full"
                         >
                           Abrir Mesa
-                        </button>
+                        </Button>
                       ) : (
-                        <button
-                          onClick={() => handleVerComanda(mesa)}
+                        <Button
+                          size="xs"
                           disabled={carregandoComanda}
-                          className="w-full text-xs bg-[#9C1C0E] hover:bg-[#7a160b] text-white font-bold py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+                          onClick={() => handleVerComanda(mesa)}
+                          className="w-full"
                         >
                           Ver Comanda
-                        </button>
+                        </Button>
                       )}
 
                       {temChamado && (
-                        <button
-                          onClick={() => handleAtenderChamado(mesa.idMesa)}
+                        <Button
+                          variant="gold"
+                          size="xs"
                           disabled={processando}
-                          className="w-full text-xs bg-[#B78A10] hover:bg-amber-700 text-white font-bold py-1 rounded-xl transition-all cursor-pointer"
+                          onClick={() => handleAtenderChamado(mesa.idMesa)}
+                          className="w-full"
                         >
                           Atender
-                        </button>
+                        </Button>
                       )}
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
           )}
         </section>
-      </main>
+      </div>
 
       {/* Modal de Detalhes da Comanda */}
       {comandaModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 font-[Poppins]">
-          <div className="bg-[#FAF6F3] rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-gray-200 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
+        <Modal
+          open
+          onClose={() => setComandaModal(null)}
+          title={`Comanda — Mesa #${comandaModal.mesa.numero}`}
+          subtitle={
+            comandaModal.pedido?.idPedido
+              ? `Pedido #${comandaModal.pedido.idPedido.slice(0, 8)} • ${
+                  comandaModal.pedido?.status || "Aberto"
+                }`
+              : undefined
+          }
+          icon={MdRestaurantMenu}
+          size="2xl"
+          footer={
+            <div className="w-full flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
-                  <span className="p-2 bg-[#9C1C0E]/10 text-[#9C1C0E] rounded-xl">
-                    <MdRestaurantMenu size={20} />
-                  </span>
-                  Comanda — Mesa #{comandaModal.mesa.numero}
-                </h3>
-                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 font-medium">
-                  <span>
-                    Pedido ID:{' '}
-                    <strong className="font-mono text-gray-800">
-                      {comandaModal.pedido?.idPedido?.slice(0, 8)}
-                    </strong>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Status:{' '}
-                    <strong className="text-[#9C1C0E]">
-                      {comandaModal.pedido?.status || 'Aberto'}
-                    </strong>
-                  </span>
-                </div>
+                <span className="text-xs text-gray-500 font-medium">
+                  Total da Comanda:
+                </span>
+                <p className="text-lg font-black text-brand">
+                  R${" "}
+                  {comandaModal.itens
+                    .filter((it) => it.status !== "Cancelado")
+                    .reduce(
+                      (acc, it) =>
+                        acc +
+                        (Number(it.precoUnitario) || 0) * (it.quantidade || 1),
+                      0
+                    )
+                    .toFixed(2)}
+                </p>
               </div>
-              <button
-                onClick={() => setComandaModal(null)}
-                className="text-gray-400 hover:text-gray-700 p-1 rounded-xl hover:bg-gray-200/60 transition-colors cursor-pointer"
-              >
-                <MdClose size={22} />
-              </button>
-            </div>
 
-            {/* Ações da Comanda */}
-            <div className="pt-3 pb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setComandaModal(null)}
+                >
+                  Fechar
+                </Button>
+                {comandaModal.pedido?.status !== "Fechado" && (
+                  <Button
+                    size="sm"
+                    icon={MdPayment}
+                    onClick={() => setModalPagamentoAberto(true)}
+                  >
+                    Pagamento & Fechamento
+                  </Button>
+                )}
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold text-gray-700">
-                Itens Consumidos ({comandaModal.itens.filter((i) => i.status !== 'Cancelado').length})
+                Itens Consumidos (
+                {
+                  comandaModal.itens.filter((i) => i.status !== "Cancelado")
+                    .length
+                }
+                )
               </span>
-              <button
-                type="button"
+              <Button
+                size="xs"
+                icon={MdAdd}
                 onClick={() => setModalAdicionarAberto(true)}
-                className="px-3 py-1.5 bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-xs"
               >
-                <MdAdd size={16} /> Incluir Item à Mesa
-              </button>
+                Incluir Item à Mesa
+              </Button>
             </div>
 
-            {/* Lista de Itens */}
-            <div className="overflow-y-auto py-2 space-y-2.5 flex-1 pr-1">
+            <div className="max-h-80 overflow-y-auto space-y-2.5 pr-1">
               {comandaModal.itens.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-8">
                   Nenhum item adicionado a esta comanda ainda.
                 </p>
               ) : (
                 comandaModal.itens.map((item) => {
-                  const podeEditarQtd = item.status === 'Pendente';
-                  const podeCancelar = item.status === 'Pendente';
+                  const podeEditarQtd = item.status === "Pendente";
 
                   return (
                     <div
                       key={item.idItemPedido}
-                      className="p-3.5 rounded-2xl border border-gray-200 bg-white flex items-center justify-between gap-3 shadow-xs"
+                      className="p-3.5 rounded-2xl border border-gray-200/80 bg-white flex items-center justify-between gap-3"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-gray-900 text-sm">
-                            {item.quantidade}x {item.nomeItem || 'Item'}
-                          </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span
-                            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                              item.status === 'Pendente'
-                                ? 'bg-amber-100 text-amber-900'
-                                : item.status === 'Em preparo'
-                                ? 'bg-orange-100 text-orange-900'
-                                : item.status === 'Pronto'
-                                ? 'bg-emerald-100 text-emerald-900'
-                                : item.status === 'Entregue'
-                                ? 'bg-blue-100 text-blue-900'
-                                : 'bg-red-100 text-red-900'
+                            className={`font-bold text-gray-900 text-sm ${
+                              item.status === "Cancelado"
+                                ? "line-through text-gray-400"
+                                : ""
                             }`}
                           >
-                            {item.status}
+                            {item.quantidade}x {item.nomeItem || "Item"}
                           </span>
+                          <StatusBadge status={item.status} />
                         </div>
                         {item.observacao && (
                           <p className="text-xs text-gray-500 italic mt-0.5">
@@ -923,41 +924,52 @@ export default function TelaGarcom() {
                           </p>
                         )}
                         <p className="text-xs text-gray-600 mt-1 font-medium">
-                          R$ {Number(item.precoUnitario || 0).toFixed(2)} un. •{' '}
+                          R$ {Number(item.precoUnitario || 0).toFixed(2)} un. •{" "}
                           <strong className="text-gray-900">
-                            Subtotal: R${' '}
-                            {(Number(item.precoUnitario || 0) * (item.quantidade || 1)).toFixed(2)}
+                            Subtotal: R${" "}
+                            {(
+                              Number(item.precoUnitario || 0) *
+                              (item.quantidade || 1)
+                            ).toFixed(2)}
                           </strong>
                         </p>
                       </div>
 
-                      {/* Controle de Quantidade e Cancelamento para itens Pendentes */}
                       <div className="flex items-center gap-2 shrink-0">
                         {itemEmAtualizacao === item.idItemPedido ? (
-                          <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium py-1 px-2 bg-gray-50 rounded-xl">
-                            <span className="w-3.5 h-3.5 border-2 border-[#9C1C0E] border-t-transparent rounded-full animate-spin" />
-                            <span className="text-[11px]">Atualizando...</span>
-                          </div>
+                          <span className="text-xs text-gray-500 font-medium">
+                            Atualizando...
+                          </span>
                         ) : podeEditarQtd ? (
                           <>
-                            <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-xl border border-gray-200">
+                            <div className="flex items-center gap-1 bg-surface p-0.5 rounded-xl border border-gray-200">
                               <button
                                 type="button"
-                                onClick={() => handleAlterarQuantidade(item, item.quantidade - 1)}
+                                onClick={() =>
+                                  handleAlterarQuantidade(
+                                    item,
+                                    item.quantidade - 1
+                                  )
+                                }
                                 disabled={processando}
-                                className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-700 hover:text-[#9C1C0E] cursor-pointer"
+                                className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-700 hover:text-brand cursor-pointer"
                                 title="Diminuir quantidade"
                               >
                                 <MdRemove size={14} />
                               </button>
-                              <span className="text-xs font-black text-gray-900 w-5 text-center">
+                              <span className="text-xs font-bold text-gray-900 w-5 text-center">
                                 {item.quantidade}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => handleAlterarQuantidade(item, item.quantidade + 1)}
+                                onClick={() =>
+                                  handleAlterarQuantidade(
+                                    item,
+                                    item.quantidade + 1
+                                  )
+                                }
                                 disabled={processando}
-                                className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-700 hover:text-[#9C1C0E] cursor-pointer"
+                                className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-700 hover:text-brand cursor-pointer"
                                 title="Aumentar quantidade"
                               >
                                 <MdAdd size={14} />
@@ -968,83 +980,45 @@ export default function TelaGarcom() {
                               type="button"
                               onClick={() => handleCancelarItem(item)}
                               disabled={processando}
-                              className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold transition-all cursor-pointer"
+                              className="p-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-bold transition-colors cursor-pointer"
                               title="Cancelar item"
                             >
                               <MdClose size={16} />
                             </button>
                           </>
-                        ) : item.status === 'Pronto' ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                              ● Pronto p/ Entrega
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                confirmarEntrega({
-                                  idItemPedido: item.idItemPedido,
-                                  nomeItem: item.cardapio?.nome || item.nomeItem || item.nome || 'Prato',
-                                  quantidade: item.quantidade,
-                                  numeroMesa: comandaModal.mesa?.numero || comandaModal.pedido?.idMesa,
-                                })
-                              }
-                              disabled={processando}
-                              className="px-2.5 py-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs cursor-pointer transition-colors"
-                            >
-                              Entregar
-                            </button>
-                          </div>
-                        ) : item.status === 'Entregue' ? (
-                          <span className="text-xs px-2.5 py-1 rounded-full font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            ✓ Entregue
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-gray-500 font-semibold italic">
-                            {item.status === 'Cancelado'
-                              ? 'Cancelado'
-                              : item.status === 'Em preparo'
-                              ? 'Em preparo na cozinha'
-                              : item.status}
-                          </span>
-                        )}
+                        ) : item.status === "Pronto" ? (
+                          <Button
+                            size="xs"
+                            disabled={processando}
+                            onClick={() =>
+                              confirmarEntrega({
+                                idItemPedido: item.idItemPedido,
+                                nomeItem:
+                                  item.cardapio?.nome ||
+                                  item.nomeItem ||
+                                  item.nome ||
+                                  "Prato",
+                                quantidade: item.quantidade,
+                                numeroMesa:
+                                  comandaModal.mesa?.numero ||
+                                  comandaModal.pedido?.idMesa,
+                              })
+                            }
+                            className="!bg-emerald-600 hover:!bg-emerald-700"
+                          >
+                            Entregar
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   );
                 })
               )}
             </div>
-
-            {/* Rodapé do Modal com Ações */}
-            <div className="pt-4 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="text-xs text-gray-500 font-medium">Total da Comanda:</span>
-                <p className="text-lg font-black text-[#9C1C0E]">
-                  R${' '}
-                  {comandaModal.itens
-                    .filter((it) => it.status !== 'Cancelado')
-                    .reduce((acc, it) => acc + (Number(it.precoUnitario) || 0) * (it.quantidade || 1), 0)
-                    .toFixed(2)}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {comandaModal.pedido?.status !== 'Fechado' && (
-                  <button
-                    onClick={() => setModalPagamentoAberto(true)}
-                    className="bg-[#9C1C0E] hover:bg-[#7a160b] text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
-                  >
-                    <MdPayment size={18} />
-                    <span>Pagamento & Fechamento</span>
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* Modal Adicionar Item ao Cardápio */}
       {modalAdicionarAberto && comandaModal && (
         <ModalAdicionarItemCardapio
           aberto={modalAdicionarAberto}
@@ -1056,7 +1030,6 @@ export default function TelaGarcom() {
         />
       )}
 
-      {/* Modal Pagamento & Fechamento com Múltiplos Pagamentos e Divisão */}
       {modalPagamentoAberto && comandaModal && (
         <ModalPagamentoComanda
           aberto={modalPagamentoAberto}
@@ -1064,39 +1037,121 @@ export default function TelaGarcom() {
           pedido={comandaModal.pedido}
           itens={comandaModal.itens}
           onFechar={() => setModalPagamentoAberto(false)}
+          onPedidoAtualizado={(pedidoAtualizado) => {
+            setComandaModal((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    pedido: { ...prev.pedido, ...pedidoAtualizado },
+                  }
+                : prev
+            );
+          }}
           onSucesso={async () => {
+            const numMesa = comandaModal.mesa.numero;
             setComandaModal(null);
             await carregarMesas();
-            setAlerta({
-              aberto: true,
-              titulo: 'Comanda Encerrada',
-              mensagem: `A Mesa #${comandaModal.mesa.numero} foi encerrada e liberada com sucesso!`,
-              tipo: 'sucesso',
-            });
+            toast.success(
+              `A Mesa #${numMesa} foi encerrada e liberada com sucesso!`
+            );
           }}
         />
       )}
 
-      {/* Modais de Alerta e Confirmação (Zero browser alert/confirm) */}
-      <ModalAlerta
-        aberto={alerta.aberto}
-        titulo={alerta.titulo}
-        mensagem={alerta.mensagem}
-        tipo={alerta.tipo}
-        onFechar={() => setAlerta((a) => ({ ...a, aberto: false }))}
-      />
+      {modalCancelamentoItem && (
+        <Modal
+          open
+          onClose={() => {
+            if (!processando) {
+              setModalCancelamentoItem(null);
+              setJustificativaCancelamento("");
+            }
+          }}
+          title="Cancelar Item do Pedido"
+          subtitle={
+            comandaModal?.mesa?.numero
+              ? `Mesa #${comandaModal.mesa.numero}`
+              : undefined
+          }
+          icon={MdClose}
+          size="md"
+          footer={
+            <div className="w-full flex items-center justify-end gap-2.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={processando}
+                onClick={() => {
+                  setModalCancelamentoItem(null);
+                  setJustificativaCancelamento("");
+                }}
+              >
+                Voltar
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                loading={processando}
+                disabled={!justificativaCancelamento.trim() || processando}
+                onClick={confirmarCancelamentoComJustificativa}
+              >
+                Confirmar Cancelamento
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-xs sm:text-sm text-gray-700 leading-relaxed">
+              Deseja cancelar o item{" "}
+              <strong className="text-gray-900">
+                {modalCancelamentoItem.item.quantidade}x{" "}
+                {modalCancelamentoItem.item.nomeItem ||
+                  modalCancelamentoItem.item.nome ||
+                  "Item"}
+              </strong>
+              ?
+            </p>
 
-      <ModalConfirmacao
-        aberto={confirmacao.aberto}
-        titulo={confirmacao.titulo}
-        mensagem={confirmacao.mensagem}
-        detalhes={confirmacao.detalhes}
-        tipo={confirmacao.tipo}
-        textoConfirmar={confirmacao.textoConfirmar}
-        processando={processando}
-        onConfirmar={confirmacao.onConfirmar}
-        onCancelar={() => setConfirmacao((c) => ({ ...c, aberto: false }))}
-      />
-    </div>
+            <Field
+              label="Justificativa do cancelamento"
+              required
+              hint="Preencha ou selecione um motivo abaixo para habilitar o cancelamento."
+            >
+              <Input
+                type="text"
+                placeholder="Ex: Cliente desistiu do item..."
+                value={justificativaCancelamento}
+                onChange={(e) => setJustificativaCancelamento(e.target.value)}
+                disabled={processando}
+                maxLength={160}
+              />
+            </Field>
+
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-semibold text-gray-500 block">
+                Motivos rápidos:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {SUGESTOES_JUSTIFICATIVA_CANCELAMENTO.map((sugestao) => (
+                  <button
+                    key={sugestao}
+                    type="button"
+                    disabled={processando}
+                    onClick={() => setJustificativaCancelamento(sugestao)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
+                      justificativaCancelamento === sugestao
+                        ? "bg-brand text-white border-brand"
+                        : "bg-surface text-gray-700 border-gray-200 hover:border-brand/40"
+                    }`}
+                  >
+                    {sugestao}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </AppShell>
   );
 }

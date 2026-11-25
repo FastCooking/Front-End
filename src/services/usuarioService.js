@@ -1,63 +1,55 @@
-const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
-const API_URL = `${BASE_URL}/usuarios`;
+import { API_BASE as BASE_URL } from "../config/api";
+import { fetchComAuth } from "./apiClient";
 
-function getAuthHeaders() {
-  const token = localStorage.getItem('token');
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
+const API_URL = `${BASE_URL}/usuarios`;
 
 export async function listarUsuarios(params = {}) {
   const query = new URLSearchParams();
-  if (params.idRestaurante) query.append('idRestaurante', params.idRestaurante);
-  if (params.funcao) query.append('funcao', params.funcao);
-  if (params.status !== undefined && params.status !== '') query.append('status', params.status);
-  if (params.busca) query.append('busca', params.busca);
-  if (params.skip !== undefined) query.append('skip', params.skip);
-  if (params.limit !== undefined) query.append('limit', params.limit);
+  if (params.idRestaurante) query.append("idRestaurante", params.idRestaurante);
+  if (params.funcao) query.append("funcao", params.funcao);
+  if (params.status !== undefined && params.status !== "")
+    query.append("status", params.status);
+  if (params.busca) query.append("busca", params.busca);
+  if (params.skip !== undefined) query.append("skip", params.skip);
+  if (params.limit !== undefined) query.append("limit", params.limit);
 
-  const url = `${API_URL}${query.toString() ? `?${query.toString()}` : ''}`;
-  const resposta = await fetch(url, {
-    method: 'GET',
-    headers: getAuthHeaders(),
+  const url = `${API_URL}${query.toString() ? `?${query.toString()}` : ""}`;
+  const resposta = await fetchComAuth(url, {
+    method: "GET",
   });
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
-    throw new Error(erro.detail || 'Erro ao listar usuários');
+    throw new Error(erro.detail || "Erro ao listar usuários");
   }
 
   return resposta.json();
 }
 
 export async function obterUsuarioPorId(idUsuario) {
-  const resposta = await fetch(`${API_URL}/${idUsuario}`, {
-    method: 'GET',
-    headers: getAuthHeaders(),
+  const resposta = await fetchComAuth(`${API_URL}/${idUsuario}`, {
+    method: "GET",
   });
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
-    throw new Error(erro.detail || 'Erro ao obter usuário');
+    throw new Error(erro.detail || "Erro ao obter usuário");
   }
 
   return resposta.json();
 }
 
 export async function criarUsuario(dados) {
-  const resposta = await fetch(API_URL, {
-    method: 'POST',
-    headers: getAuthHeaders(),
+  const resposta = await fetchComAuth(API_URL, {
+    method: "POST",
     body: JSON.stringify(dados),
   });
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
     const msg = Array.isArray(erro.detail)
-      ? erro.detail.map((e) => e.msg).join(', ')
-      : erro.detail || 'Erro ao cadastrar usuário';
+      ? erro.detail.map((e) => e.msg).join(", ")
+      : erro.detail || "Erro ao cadastrar usuário";
     throw new Error(msg);
   }
 
@@ -65,17 +57,16 @@ export async function criarUsuario(dados) {
 }
 
 export async function atualizarUsuario(idUsuario, dados) {
-  const resposta = await fetch(`${API_URL}/${idUsuario}`, {
-    method: 'PUT',
-    headers: getAuthHeaders(),
+  const resposta = await fetchComAuth(`${API_URL}/${idUsuario}`, {
+    method: "PUT",
     body: JSON.stringify(dados),
   });
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
     const msg = Array.isArray(erro.detail)
-      ? erro.detail.map((e) => e.msg).join(', ')
-      : erro.detail || 'Erro ao atualizar usuário';
+      ? erro.detail.map((e) => e.msg).join(", ")
+      : erro.detail || "Erro ao atualizar usuário";
     throw new Error(msg);
   }
 
@@ -83,15 +74,14 @@ export async function atualizarUsuario(idUsuario, dados) {
 }
 
 export async function alterarStatusUsuario(idUsuario, status) {
-  const resposta = await fetch(`${API_URL}/${idUsuario}/status`, {
-    method: 'PATCH',
-    headers: getAuthHeaders(),
+  const resposta = await fetchComAuth(`${API_URL}/${idUsuario}/status`, {
+    method: "PATCH",
     body: JSON.stringify({ status }),
   });
 
   if (!resposta.ok) {
     const erro = await resposta.json().catch(() => ({}));
-    throw new Error(erro.detail || 'Erro ao alterar status do usuário');
+    throw new Error(erro.detail || "Erro ao alterar status do usuário");
   }
 
   return resposta.json();
@@ -102,14 +92,13 @@ export async function resetarSenhaUsuario(idUsuario, novaSenha) {
 }
 
 export async function excluirUsuario(idUsuario) {
-  const resposta = await fetch(`${API_URL}/${idUsuario}`, {
-    method: 'DELETE',
-    headers: getAuthHeaders(),
+  const resposta = await fetchComAuth(`${API_URL}/${idUsuario}`, {
+    method: "DELETE",
   });
 
   if (!resposta.ok && resposta.status !== 204) {
     const erro = await resposta.json().catch(() => ({}));
-    throw new Error(erro.detail || 'Erro ao remover usuário');
+    throw new Error(erro.detail || "Erro ao remover usuário");
   }
 
   return true;
