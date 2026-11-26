@@ -201,6 +201,7 @@ export default function SecaoEstoque({
 
       {modalEstoque && (
         <ModalEstoque
+          key={itemEdicao?.idEstoque || itemEdicao?.id || "novo"}
           item={itemEdicao}
           idRestaurante={idRestauranteGerente}
           onClose={() => {

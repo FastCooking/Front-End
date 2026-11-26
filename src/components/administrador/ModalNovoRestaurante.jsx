@@ -5,8 +5,7 @@ import {
   MdVisibility,
   MdVisibilityOff,
 } from "react-icons/md";
-import { criarRestaurante } from "../../services/restauranteService";
-import { criarUsuario } from "../../services/usuarioService";
+import { criarRestauranteComUsuario } from "../../services/restauranteService";
 import {
   formatarCEP,
   formatarCNPJ,
@@ -76,23 +75,23 @@ function ModalNovoRestaurante({ onClose, onSuccess }) {
     setCarregando(true);
 
     try {
-      const restCriado = await criarRestaurante({
-        nome: nomeRestaurante.trim(),
-        cnpj,
-        telefone,
-        email: emailRestaurante.trim(),
-        cep,
-        status: true,
-      });
-
-      await criarUsuario({
-        idRestaurante: restCriado.idRestaurante,
-        nome: nomeUsuario.trim(),
-        cpf,
-        email: emailUsuario.trim(),
-        senha,
-        funcao,
-        status: true,
+      await criarRestauranteComUsuario({
+        restaurante: {
+          nome: nomeRestaurante.trim(),
+          cnpj,
+          telefone,
+          email: emailRestaurante.trim(),
+          cep,
+          status: true,
+        },
+        usuario: {
+          nome: nomeUsuario.trim(),
+          cpf,
+          email: emailUsuario.trim(),
+          senha,
+          funcao,
+          status: true,
+        },
       });
 
       onSuccess();

@@ -280,7 +280,9 @@ export default function TelaCozinha() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {itensFiltrados.map((item) => {
               const isEmPreparo = item.status === "Em preparo";
-              const minutosEspera = item.tempoEsperaMinutos || 0;
+              const minutosEspera = Math.floor(
+                Number(item.tempoEsperaMinutos) || 0
+              );
               const prioridadeAlta =
                 minutosEspera >= 15 || (item.pontuacao || 0) >= 30;
 

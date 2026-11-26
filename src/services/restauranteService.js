@@ -68,6 +68,23 @@ export async function criarRestaurante(dados) {
   return resposta.json();
 }
 
+export async function criarRestauranteComUsuario(dados) {
+  const resposta = await fetchComAuth(`${API_URL}/com-usuario`, {
+    method: "POST",
+    body: JSON.stringify(dados),
+  });
+
+  if (!resposta.ok) {
+    const erro = await resposta.json().catch(() => ({}));
+    const msg = Array.isArray(erro.detail)
+      ? erro.detail.map((e) => e.msg).join(", ")
+      : erro.detail || "Erro ao criar restaurante e usuário inicial";
+    throw new Error(msg);
+  }
+
+  return resposta.json();
+}
+
 export async function atualizarRestaurante(idRestaurante, dados) {
   const resposta = await fetchComAuth(`${API_URL}/${idRestaurante}`, {
     method: "PUT",

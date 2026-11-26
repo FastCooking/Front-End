@@ -13,6 +13,41 @@ const UNIDADES = [
   { label: "Caixa (cx)", value: "cx" },
 ];
 
+const MAPA_UNIDADES = {
+  kg: "kg",
+  quilo: "kg",
+  quilograma: "kg",
+  quilogramas: "kg",
+  g: "g",
+  gr: "g",
+  grama: "g",
+  gramas: "g",
+  l: "l",
+  lt: "l",
+  litro: "l",
+  litros: "l",
+  ml: "ml",
+  mililitro: "ml",
+  mililitros: "ml",
+  un: "un",
+  und: "un",
+  unid: "un",
+  unidade: "un",
+  unidades: "un",
+  pct: "pct",
+  pacote: "pct",
+  pacotes: "pct",
+  cx: "cx",
+  caixa: "cx",
+  caixas: "cx",
+};
+
+function normalizarUnidade(valor) {
+  if (!valor) return "kg";
+  const limpo = String(valor).trim().toLowerCase();
+  return MAPA_UNIDADES[limpo] || limpo;
+}
+
 function ModalEstoque({ item, idRestaurante, onClose, onSuccess }) {
   const [nome, setNome] = useState(item?.nome || "");
   const [quantidadeEmEstoque, setQuantidadeEmEstoque] = useState(
@@ -25,7 +60,9 @@ function ModalEstoque({ item, idRestaurante, onClose, onSuccess }) {
       ? String(item.quantidadeMinima)
       : ""
   );
-  const [unidadeMedida, setUnidadeMedida] = useState(item?.unidadeMedida || "kg");
+  const [unidadeMedida, setUnidadeMedida] = useState(
+    normalizarUnidade(item?.unidadeMedida || item?.unidade)
+  );
 
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -45,7 +82,7 @@ function ModalEstoque({ item, idRestaurante, onClose, onSuccess }) {
           ? String(item.quantidadeMinima)
           : ""
       );
-      setUnidadeMedida(item.unidadeMedida || "kg");
+      setUnidadeMedida(normalizarUnidade(item.unidadeMedida || item.unidade));
     } else {
       setNome("");
       setQuantidadeEmEstoque("");
